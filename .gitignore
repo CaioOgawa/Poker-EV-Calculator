@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Testing & coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Vision / data
+data/raw/
+data/processed/
+*.png
+*.jpg
+*.jpeg
+*.mp4
+*.avi
+models/weights/
+*.pt
+*.pth
+*.onnx
+
+# Logs & outputs
+logs/
+output/reports/*.pdf
+output/charts/*.png
+
+# Env secrets
+.env
+.env.*
