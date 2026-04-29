@@ -105,3 +105,31 @@ def test_multi_way_two_players_matches_heads_up():
     mw = calc.multi_way([["As", "Kd"], ["Qh", "Qd"]], seed=SEED)
     hu = calc.heads_up(["As", "Kd"], ["Qh", "Qd"], seed=SEED)
     assert abs(mw[0] - hu) < TOL
+
+
+# ------------------------------------------------------------------
+# range_vs_range
+# ------------------------------------------------------------------
+
+def test_range_vs_range_sums_to_one():
+    eq_a, eq_b = calc.range_vs_range("AA,KK", "QQ,JJ", seed=SEED)
+    assert abs(eq_a + eq_b - 1.0) < 0.01
+
+
+def test_range_vs_range_aa_kk_beats_qq_jj():
+    # AA/KK should be heavy favourite over QQ/JJ
+    eq_a, eq_b = calc.range_vs_range("AA,KK", "QQ,JJ", seed=SEED)
+    assert eq_a > 0.70
+
+
+def test_range_vs_range_symmetric_ranges():
+    # Identical ranges — each side should be close to 50% (slight variance due to blockers)
+    eq_a, eq_b = calc.range_vs_range("AKs,AKo", "AKs,AKo", seed=SEED)
+    assert abs(eq_a - 0.5) < 0.05
+    assert abs(eq_b - 0.5) < 0.05
+
+
+def test_range_vs_range_returns_tuple():
+    result = calc.range_vs_range("AA", "KK", seed=SEED)
+    assert isinstance(result, tuple)
+    assert len(result) == 2
