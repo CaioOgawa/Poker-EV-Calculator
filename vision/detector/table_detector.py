@@ -4,7 +4,6 @@ from pathlib import Path
 
 try:
     import cv2
-    import numpy as np
     CV2_AVAILABLE = True
 except ImportError:
     CV2_AVAILABLE = False

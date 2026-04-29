@@ -3,7 +3,6 @@ from __future__ import annotations
 
 try:
     import matplotlib.pyplot as plt
-    import numpy as np
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
