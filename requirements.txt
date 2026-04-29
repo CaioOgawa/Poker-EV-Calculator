@@ -7,9 +7,6 @@ scipy>=1.13.0
 treys>=0.1.8
 # pokerkit — install manually if needed: pip install pokerkit
 
-# GTO / solver integration
-pypokerengine>=1.0.1
-
 # Machine learning (poker-quant)
 scikit-learn>=1.4.0
 xgboost>=2.0.0
