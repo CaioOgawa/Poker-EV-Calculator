@@ -23,7 +23,7 @@ jobs:
           pip install --upgrade pip
           pip install ruff pytest pytest-cov
           pip install treys numpy scipy pandas matplotlib seaborn plotly rich tqdm joblib
-          pip install scikit-learn xgboost
+          pip install scikit-learn xgboost typer
           pip install -e .
 
       - name: Lint (ruff)
