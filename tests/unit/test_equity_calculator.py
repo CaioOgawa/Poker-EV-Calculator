@@ -3,6 +3,8 @@
 Reference equities from Equilab / PokerStove (preflop, all-in, random runout).
 Monte Carlo tolerance: ±2% at 50k iterations with fixed seed.
 """
+import pytest
+pytestmark = pytest.mark.slow
 from core.equity.calculator import EquityCalculator
 import pytest
 

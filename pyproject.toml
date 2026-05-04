@@ -21,6 +21,9 @@ include = ["core*", "engine*", "risk*", "simulation*", "vision*", "output*", "cl
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=. --cov-report=term-missing"
+markers = [
+    "slow: Monte Carlo / equity sweeps — skip with -m 'not slow'",
+]
 
 [tool.ruff]
 line-length = 100
