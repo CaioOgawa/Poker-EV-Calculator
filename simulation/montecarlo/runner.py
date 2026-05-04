@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass
-class SimResult:
+class MonteCarloResult:
     iterations: int
     mean_ev: float
     std_dev: float
@@ -20,7 +20,7 @@ class MonteCarloSim:
         if seed is not None:
             random.seed(seed)
 
-    def run_ev(self, ev_fn, **kwargs) -> SimResult:
+    def run_ev(self, ev_fn, **kwargs) -> MonteCarloResult:
         """
         Run ev_fn(**kwargs) for N iterations and return distribution stats.
         ev_fn must return a float (single trial EV).
@@ -31,7 +31,7 @@ class MonteCarloSim:
         mean = sum(results) / n
         variance = sum((x - mean) ** 2 for x in results) / n
         std = variance ** 0.5
-        return SimResult(
+        return MonteCarloResult(
             iterations=n,
             mean_ev=mean,
             std_dev=std,

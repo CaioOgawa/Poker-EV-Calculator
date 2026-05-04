@@ -77,3 +77,34 @@ class BankrollSimulator:
             ruin_rate=float(np.mean(cumulative[:, -1] <= ruin_threshold)),
             mean_final=float(np.mean(cumulative[:, -1])),
         )
+
+    def simulate_multitable(
+        self,
+        num_tables: int,
+        winrate_per_100: float,
+        std_per_100: float,
+        starting_bankroll: float,
+        hands_per_session: int = 100,
+        num_sessions: int = 500,
+        num_careers: int = 10_000,
+        ruin_threshold: float = 0.0,
+        seed: int | None = 42,
+    ) -> SimResult:
+        """Simulate multitabling by scaling winrate and variance.
+
+        num_tables tables played simultaneously → combined winrate scales
+        linearly; combined std scales by sqrt(num_tables) (independent tables).
+        """
+        import math
+        combined_wr = winrate_per_100 * num_tables
+        combined_std = std_per_100 * math.sqrt(num_tables)
+        return self.simulate(
+            winrate_per_100=combined_wr,
+            std_per_100=combined_std,
+            starting_bankroll=starting_bankroll,
+            hands_per_session=hands_per_session,
+            num_sessions=num_sessions,
+            num_careers=num_careers,
+            ruin_threshold=ruin_threshold,
+            seed=seed,
+        )

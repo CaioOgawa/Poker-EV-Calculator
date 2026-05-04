@@ -1,3 +1,3 @@
-from simulation.montecarlo.runner import MonteCarloSim
+from simulation.montecarlo.runner import MonteCarloSim, MonteCarloResult
 
-__all__ = ["MonteCarloSim"]
+__all__ = ["MonteCarloSim", "MonteCarloResult"]
