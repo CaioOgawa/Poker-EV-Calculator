@@ -159,7 +159,6 @@ class ICMNash:
         assert len(stacks) == 2, "solve_hu requires exactly 2 players"
 
         hero_stack, villain_stack = stacks
-        total = hero_stack + villain_stack
 
         # --- Pre-compute static ICM scenarios ---
         # Hero folds their blind
@@ -195,6 +194,7 @@ class ICMNash:
         # --- Iterate push/call ranges ---
         # Start: villain calls top 30% by default
         call_threshold = int(len(HAND_RANK) * 0.30) - 1
+        prev_state: tuple[int, int] | None = None
 
         for _ in range(max_iter):
             # Step 1: given villain's call range, find all hands where push > fold
@@ -245,6 +245,14 @@ class ICMNash:
                     new_call_threshold = idx
 
             call_threshold = new_call_threshold
+
+            # Stop once both ranges stop changing round over round — best-response
+            # iteration in games without a pure equilibrium can otherwise cycle
+            # forever within max_iter without making further progress.
+            state = (push_threshold, call_threshold)
+            if state == prev_state:
+                break
+            prev_state = state
 
         push_range = HAND_RANK[: push_threshold + 1] if push_threshold >= 0 else []
         call_range = HAND_RANK[: call_threshold + 1] if call_threshold >= 0 else []

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from functools import lru_cache
 
 from engine.icm.model import ICMModel
 from engine.icm.pressure import ICMPressure
@@ -64,6 +63,7 @@ class TournamentSim:
         self._pressure = ICMPressure(self._icm)
         # Pre-convert threshold to int to keep all comparisons in integer space
         self._threshold_int = int(push_threshold_bbs)
+        self._bf_cache: dict[tuple[tuple[int, ...], tuple[float, ...], int, int], float] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -245,7 +245,6 @@ class TournamentSim:
             required_eq = push_size / (push_size + gain)
             return self.caller_equity > required_eq
 
-    @lru_cache(maxsize=4096)
     def _bubble_factor_cached(
         self,
         rounded_stacks: tuple[int, ...],
@@ -253,6 +252,12 @@ class TournamentSim:
         caller_idx: int,
         pusher_idx: int,
     ) -> float:
-        return self._pressure.bubble_factor(
+        key = (rounded_stacks, alive_payouts, caller_idx, pusher_idx)
+        cached = self._bf_cache.get(key)
+        if cached is not None:
+            return cached
+        result = self._pressure.bubble_factor(
             list(rounded_stacks), list(alive_payouts), caller_idx, pusher_idx
         )
+        self._bf_cache[key] = result
+        return result

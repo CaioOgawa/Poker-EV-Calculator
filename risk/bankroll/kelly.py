@@ -10,6 +10,10 @@ class KellyCriterion:
         win_odds: net odds (e.g. 2.0 means win 2x the stake)
         fraction: fractional Kelly multiplier (default 1 = full Kelly)
         """
+        if not 0.0 <= win_prob <= 1.0:
+            raise ValueError(f"win_prob must be in [0, 1], got {win_prob}")
+        if win_odds <= 0:
+            raise ValueError(f"win_odds must be positive, got {win_odds}")
         kelly = (win_prob * win_odds - (1 - win_prob)) / win_odds
         return max(0.0, kelly * fraction)
 

@@ -1,5 +1,4 @@
 """HandEvaluator tests — hand_class, outs, draw_strength."""
-import pytest
 from core.hand_evaluator import HandEvaluator
 
 ev = HandEvaluator()

@@ -17,15 +17,26 @@ class MonteCarloResult:
 class MonteCarloSim:
     def __init__(self, iterations: int = 50_000, seed: int | None = None):
         self.iterations = iterations
-        if seed is not None:
-            random.seed(seed)
+        self.seed = seed
 
     def run_ev(self, ev_fn, **kwargs) -> MonteCarloResult:
         """
         Run ev_fn(**kwargs) for N iterations and return distribution stats.
         ev_fn must return a float (single trial EV).
+
+        If a seed was provided at construction, the module-level `random`
+        state is seeded for the duration of this call only and restored
+        afterward, so ev_fn can use random.random()/random.choice()/etc.
+        reproducibly without this instance permanently mutating global
+        random state or interfering with other code in the same process.
         """
-        results = [ev_fn(**kwargs) for _ in range(self.iterations)]
+        prior_state = random.getstate()
+        try:
+            if self.seed is not None:
+                random.seed(self.seed)
+            results = [ev_fn(**kwargs) for _ in range(self.iterations)]
+        finally:
+            random.setstate(prior_state)
         results_sorted = sorted(results)
         n = len(results_sorted)
         mean = sum(results) / n

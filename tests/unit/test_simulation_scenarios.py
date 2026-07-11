@@ -1,10 +1,10 @@
 """Tests for TournamentSim and BankrollSimulator.simulate_multitable."""
 import pytest
 
-pytestmark = pytest.mark.slow
-
 from simulation.scenarios.tournament import TournamentSim, TournamentResult
 from risk.bankroll.simulator import BankrollSimulator
+
+pytestmark = pytest.mark.slow
 
 # ------------------------------------------------------------------
 # TournamentSim

@@ -12,18 +12,36 @@ app = typer.Typer(help="Poker EV Calculator")
 console = Console()
 
 _SUITS = frozenset("shdc")
+_RANKS = frozenset("23456789TJQKA")
+
+
+def _die(message: str) -> None:
+    """Print a clean error and exit, instead of letting a traceback leak."""
+    console.print(f"[red bold]Error:[/] {message}")
+    raise typer.Exit(code=1)
 
 
 def _parse_cards(s: str) -> list[str]:
     """Split a run of card tokens ('AsKs') into ['As', 'Ks']."""
     if len(s) % 2 != 0:
         raise typer.BadParameter(f"Invalid card string: {s!r}")
-    return [s[i : i + 2] for i in range(0, len(s), 2)]
+    cards = [s[i : i + 2] for i in range(0, len(s), 2)]
+    for card in cards:
+        if card[0] not in _RANKS or card[1] not in _SUITS:
+            raise typer.BadParameter(f"Invalid card {card!r} in {s!r}")
+    if len(set(cards)) != len(cards):
+        raise typer.BadParameter(f"Duplicate card in {s!r}")
+    return cards
 
 
 def _is_hand(s: str) -> bool:
     """Return True if s looks like exactly two specific cards (e.g. 'AsKd')."""
-    return len(s) == 4 and s[1] in _SUITS and s[3] in _SUITS
+    return (
+        len(s) == 4
+        and s[0] in _RANKS and s[1] in _SUITS
+        and s[2] in _RANKS and s[3] in _SUITS
+        and s[:2] != s[2:]
+    )
 
 
 @app.command("eval")
@@ -40,9 +58,17 @@ def eval_hand(
     hole = _parse_cards(hero)
     board_cards = _parse_cards(board)
 
+    if len(hole) != 2:
+        raise typer.BadParameter(f"--hero must be exactly 2 cards, got {len(hole)}")
+    if len(board_cards) not in (3, 4, 5):
+        raise typer.BadParameter(f"--board must be 3-5 cards, got {len(board_cards)}")
+
     evaluator = HandEvaluator()
-    rank = evaluator.rank(hole, board_cards)
-    pct = evaluator.percentile(hole, board_cards)
+    try:
+        rank = evaluator.rank(hole, board_cards)
+        pct = evaluator.percentile(hole, board_cards)
+    except (ValueError, KeyError) as e:
+        _die(str(e))
 
     te = Evaluator()
     class_name = te.class_to_string(te.get_rank_class(rank))
@@ -83,15 +109,23 @@ def equity(
     hero_cards = _parse_cards(hero)
     board_cards = _parse_cards(board) if board else None
 
+    if len(hero_cards) != 2:
+        raise typer.BadParameter(f"--hero must be exactly 2 cards, got {len(hero_cards)}")
+    if board_cards is not None and len(board_cards) not in (3, 4, 5):
+        raise typer.BadParameter(f"--board must be 3-5 cards, got {len(board_cards)}")
+
     calc = EquityCalculator(iterations=iterations)
 
-    if _is_hand(villain):
-        villain_cards = [villain[:2], villain[2:]]
-        eq = calc.heads_up(hero_cards, villain_cards, board=board_cards)
-        mode = "vs hand"
-    else:
-        eq = calc.vs_range(hero_cards, villain, board=board_cards)
-        mode = "vs range"
+    try:
+        if _is_hand(villain):
+            villain_cards = [villain[:2], villain[2:]]
+            eq = calc.heads_up(hero_cards, villain_cards, board=board_cards)
+            mode = "vs hand"
+        else:
+            eq = calc.vs_range(hero_cards, villain, board=board_cards)
+            mode = "vs range"
+    except (ValueError, KeyError) as e:
+        _die(str(e))
 
     result = {
         "hero": hero,
@@ -122,11 +156,17 @@ def icm(
     """Calculate ICM equity for each player at the table."""
     from engine.icm import ICMModel
 
-    stack_list = [float(s) for s in stacks.split(",")]
-    payout_list = [float(p) for p in payouts.split(",")]
+    try:
+        stack_list = [float(s) for s in stacks.split(",")]
+        payout_list = [float(p) for p in payouts.split(",")]
+    except ValueError:
+        raise typer.BadParameter("--stacks and --payouts must be comma-separated numbers")
 
     model = ICMModel()
-    equities = model.equity(stack_list, payout_list)
+    try:
+        equities = model.equity(stack_list, payout_list)
+    except (ValueError, ZeroDivisionError) as e:
+        _die(str(e))
 
     rows = [
         {
@@ -166,12 +206,18 @@ def roi(
     """Calculate tournament ROI and ITM rate."""
     from risk.roi.calculator import ROICalculator
 
-    buyin_list = [float(b) for b in buyins.split(",")]
-    cash_list = [float(c) for c in cashes.split(",")]
+    try:
+        buyin_list = [float(b) for b in buyins.split(",")]
+        cash_list = [float(c) for c in cashes.split(",")]
+    except ValueError:
+        raise typer.BadParameter("--buyins and --cashes must be comma-separated numbers")
 
     calc = ROICalculator()
-    roi_val = calc.roi(buyin_list, cash_list)
-    itm = calc.itm_rate(cash_list)
+    try:
+        roi_val = calc.roi(buyin_list, cash_list)
+        itm = calc.itm_rate(cash_list)
+    except ValueError as e:
+        _die(str(e))
 
     result = {
         "tournaments": len(buyin_list),

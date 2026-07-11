@@ -1,7 +1,8 @@
 """Tests for ICMPressure (bubble factor) and ICMNash (HU push/fold)."""
 import pytest
-pytestmark = pytest.mark.slow
 from engine.icm import ICMPressure, ICMNash, HAND_RANK
+
+pytestmark = pytest.mark.slow
 
 # ------------------------------------------------------------------
 # ICMPressure — bubble factor

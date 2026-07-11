@@ -1,3 +1,5 @@
+import pytest
+
 from core.ranges.range_parser import RangeParser
 
 p = RangeParser()
@@ -57,3 +59,47 @@ def test_no_duplicates():
         key = frozenset(c)
         assert key not in seen
         seen.add(key)
+
+
+# ------------------------------------------------------------------
+# Invalid tokens must raise, not silently disappear from the range
+# ------------------------------------------------------------------
+
+def test_invalid_rank_raises():
+    with pytest.raises(ValueError):
+        p.parse("AXs")
+
+
+def test_garbage_token_raises():
+    with pytest.raises(ValueError):
+        p.parse("ABCDE")
+
+
+def test_lone_plus_raises():
+    with pytest.raises(ValueError):
+        p.parse("+")
+
+
+def test_pair_with_suit_suffix_raises():
+    with pytest.raises(ValueError):
+        p.parse("AAs")
+
+
+def test_dash_range_invalid_rank_raises():
+    with pytest.raises(ValueError):
+        p.parse("JTs-8Xs")
+
+
+def test_dash_range_mismatched_gap_raises():
+    with pytest.raises(ValueError):
+        p.parse("JTs-97s")
+
+
+def test_dash_range_pair_as_connector_raises():
+    with pytest.raises(ValueError):
+        p.parse("JJs-88s")
+
+
+def test_dash_range_missing_side_raises():
+    with pytest.raises(ValueError):
+        p.parse("JTs-")

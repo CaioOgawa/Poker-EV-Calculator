@@ -122,35 +122,34 @@ class EquityCalculator:
 
         Each iteration samples one unblocked combo from each range, then runs
         a heads-up Monte Carlo runout. Combos that block each other are removed
-        before sampling.
+        before sampling. Iterations where the sampled combo from range_a blocks
+        every combo in range_b are skipped and excluded from the denominator
+        (they carry no information about either range's equity).
         """
         rng = _random_mod.Random(seed) if seed is not None else self._rng
         board = board or []
         board_c = _to_cards(board)
         board_set = set(board_c)
 
-        combos_a = _PARSER.parse(range_a)
-        combos_b = _PARSER.parse(range_b)
+        combos_a = [_to_cards(list(c)) for c in _PARSER.parse(range_a)]
+        combos_b = [_to_cards(list(c)) for c in _PARSER.parse(range_b)]
 
         need = 5 - len(board_c)
         wins_a = 0.0
+        valid = 0
 
         for _ in range(self.iterations):
             # Sample combo A first, then pick an unblocked combo B
-            combo_a = rng.choice(combos_a)
-            a_cards = _to_cards(list(combo_a))
+            a_cards = rng.choice(combos_a)
             a_set = set(a_cards) | board_set
 
-            available_b = [
-                _to_cards(list(cb))
-                for cb in combos_b
-                if not any(c in a_set for c in _to_cards(list(cb)))
-            ]
+            available_b = [cb for cb in combos_b if not any(c in a_set for c in cb)]
             if not available_b:
                 continue
 
+            valid += 1
             b_cards = rng.choice(available_b)
-            known = set(a_cards) | set(b_cards) | board_set
+            known = a_set | set(b_cards)
             deck = [c for c in _full_deck() if c not in known]
             rng.shuffle(deck)
             run_board = board_c + deck[:need]
@@ -162,7 +161,13 @@ class EquityCalculator:
             elif ra == rb:
                 wins_a += 0.5
 
-        eq_a = wins_a / self.iterations
+        if valid == 0:
+            raise ValueError(
+                f"Ranges '{range_a}' and '{range_b}' block each other completely "
+                f"given board {board}"
+            )
+
+        eq_a = wins_a / valid
         return eq_a, 1.0 - eq_a
 
     def multi_way(

@@ -58,7 +58,7 @@ class StakeRecommender:
         if winrate_per_100 <= 0:
             raise ValueError("winrate_per_100 must be positive to recommend a stake")
 
-        available = stakes or STANDARD_STAKES
+        available = sorted(stakes or STANDARD_STAKES, key=lambda s: s[1])
         best: StakeRecommendation | None = None
 
         for name, bb_size in available:
