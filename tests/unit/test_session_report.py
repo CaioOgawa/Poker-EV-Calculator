@@ -51,3 +51,19 @@ def test_session_id_defaults_to_timestamp_format():
 def test_custom_session_id():
     report = SessionReport(session_id="my-session")
     assert report.summary()["session_id"] == "my-session"
+
+
+def test_hand_category_defaults_to_none():
+    assert _hand(1.0, 1.0).category is None
+
+
+def test_hand_category_can_be_set():
+    hand = Hand(
+        hero_cards=["As", "Ks"],
+        board=["Qh", "Js", "Ts"],
+        pot=10.0,
+        result=5.0,
+        ev=2.0,
+        category="value bet",
+    )
+    assert hand.category == "value bet"

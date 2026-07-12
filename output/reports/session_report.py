@@ -12,6 +12,7 @@ class Hand:
     pot: float
     result: float
     ev: float
+    category: str | None = None  # e.g. "3bet pot", "river bluff" — for LeakReport
 
 
 @dataclass
