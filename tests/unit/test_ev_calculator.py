@@ -3,7 +3,7 @@ from engine.ev.calculator import EVCalculator
 
 def test_pot_odds():
     calc = EVCalculator()
-    assert abs(calc.pot_odds(50, 100) - 1/3) < 1e-9
+    assert abs(calc.pot_odds(50, 100) - 1 / 3) < 1e-9
 
 
 def test_call_ev_positive():

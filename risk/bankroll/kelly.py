@@ -1,4 +1,5 @@
 """Kelly Criterion for optimal bet sizing."""
+
 from __future__ import annotations
 
 
@@ -17,6 +18,8 @@ class KellyCriterion:
         kelly = (win_prob * win_odds - (1 - win_prob)) / win_odds
         return max(0.0, kelly * fraction)
 
-    def units(self, bankroll: float, win_prob: float, win_odds: float, fraction: float = 0.25) -> float:
+    def units(
+        self, bankroll: float, win_prob: float, win_odds: float, fraction: float = 0.25
+    ) -> float:
         """Return stake size in currency units."""
         return bankroll * self.fraction(win_prob, win_odds, fraction)

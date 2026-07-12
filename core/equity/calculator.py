@@ -1,4 +1,5 @@
 """Monte Carlo equity calculator for heads-up and multi-way spots."""
+
 from __future__ import annotations
 import random as _random_mod
 from treys import Evaluator, Card, Deck
@@ -78,14 +79,9 @@ class EquityCalculator:
 
         all_combos = _PARSER.parse(villain_range)
         # Filter combos blocked by hero/board
+        available = [(_to_cards(list(combo)), combo) for combo in all_combos]
         available = [
-            (_to_cards(list(combo)), combo)
-            for combo in all_combos
-        ]
-        available = [
-            (cards, combo)
-            for cards, combo in available
-            if not any(c in hero_set for c in cards)
+            (cards, combo) for cards, combo in available if not any(c in hero_set for c in cards)
         ]
         if not available:
             raise ValueError(

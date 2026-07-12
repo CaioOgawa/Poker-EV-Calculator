@@ -1,4 +1,5 @@
 """Push/fold MTT simulator with ICM-aware calling decisions."""
+
 from __future__ import annotations
 
 import random
@@ -11,9 +12,9 @@ from engine.icm.pressure import ICMPressure
 @dataclass
 class TournamentResult:
     finish_positions: list[int]  # finish position per trial (1 = winner)
-    itm_rate: float              # fraction of trials that finished in the money
+    itm_rate: float  # fraction of trials that finished in the money
     avg_finish: float
-    roi: float                   # (avg_prize / buy_in) - 1; 0-sum ≈ 0
+    roi: float  # (avg_prize / buy_in) - 1; 0-sum ≈ 0
 
 
 def _round_stack(s: int, granularity: int = 100) -> int:
@@ -112,6 +113,18 @@ class TournamentSim:
             payouts[i] = share
         return payouts
 
+    @staticmethod
+    def _next_seat(current: int, alive: list[int]) -> int:
+        """Return the next alive seat after `current` in circular seat order.
+
+        Operates on seat identities, not list position, so it stays correct
+        no matter how `alive` has been mutated by prior remove() calls.
+        """
+        for s in sorted(alive):
+            if s > current:
+                return s
+        return min(alive)
+
     def _run_one(self, payouts: list[float]) -> tuple[int, float]:
         """Simulate one tournament. Returns (finish_position, prize_fraction)."""
         stacks = [self.starting_stack] * self.num_players
@@ -120,8 +133,11 @@ class TournamentSim:
         finish_order: list[int] = []
 
         hand = 0
-        # Randomise starting BB position so no seat has a systematic advantage
-        bb_pos = self._rng.randrange(len(alive))
+        # Randomise starting BB seat so no seat has a systematic advantage.
+        # bb_seat tracks a player identity (not a list index), because `alive`
+        # shrinks via remove() as players bust — an index-based pointer would
+        # silently skip or repeat a seat whenever a removal shifted the list.
+        bb_seat = self._rng.choice(alive)
 
         while len(alive) > 1:
             hand += 1
@@ -129,19 +145,16 @@ class TournamentSim:
             if hand % 15 == 0:
                 bb = bb + bb // 2
 
-            n = len(alive)
-            bb_pos = bb_pos % n
-
             # Post big blind — ensures chips drain every hand (termination guarantee)
-            bb_seat = alive[bb_pos]
             blind = min(bb, stacks[bb_seat])
             stacks[bb_seat] -= blind
-            bb_pos = (bb_pos + 1) % max(1, n)
 
             if stacks[bb_seat] == 0:
                 alive.remove(bb_seat)
                 finish_order.append(bb_seat)
-                bb_pos = bb_pos % max(1, len(alive))
+                if len(alive) <= 1:
+                    break
+                bb_seat = self._next_seat(bb_seat, alive)
                 continue
 
             if len(alive) <= 1:
@@ -149,36 +162,43 @@ class TournamentSim:
 
             # Pick the short stack with random tie-breaking to avoid seat-0 bias
             min_stack = min(stacks[s] for s in alive)
-            candidates = [i for i, s in enumerate(alive) if stacks[s] == min_stack]
-            pusher_idx = self._rng.choice(candidates)
-            pusher_seat = alive[pusher_idx]
+            candidates = [s for s in alive if stacks[s] == min_stack]
+            pusher_seat = self._rng.choice(candidates)
             push_size = stacks[pusher_seat]
 
             # Integer comparison: push_size // bb > threshold avoids float * huge_int
             if bb > 0 and push_size // bb > self._threshold_int:
-                continue  # not in push/fold territory yet; blinds keep draining stacks
+                # Not in push/fold territory yet; blinds keep draining stacks,
+                # but the button still advances to the next hand.
+                bb_seat = self._next_seat(bb_seat, alive)
+                continue
 
-            caller_seat = self._find_caller(alive, pusher_seat, stacks, payouts, bb, blind, push_size)
+            caller_seat = self._find_caller(
+                alive, pusher_seat, stacks, payouts, bb, blind, push_size
+            )
 
             if caller_seat is None:
                 # Steal: pusher wins the dead blind
                 stacks[pusher_seat] += blind
-                continue
-
-            eq = self.caller_equity
-            if self._rng.random() < eq:
-                # caller wins
-                stacks[caller_seat] += push_size + blind
-                stacks[pusher_seat] = 0
-                alive.remove(pusher_seat)
-                finish_order.append(pusher_seat)
             else:
-                # pusher wins
-                stacks[pusher_seat] += push_size + blind
-                stacks[caller_seat] = max(0, stacks[caller_seat] - push_size)
-                if stacks[caller_seat] == 0:
-                    alive.remove(caller_seat)
-                    finish_order.append(caller_seat)
+                eq = self.caller_equity
+                if self._rng.random() < eq:
+                    # caller wins
+                    stacks[caller_seat] += push_size + blind
+                    stacks[pusher_seat] = 0
+                    alive.remove(pusher_seat)
+                    finish_order.append(pusher_seat)
+                else:
+                    # pusher wins
+                    stacks[pusher_seat] += push_size + blind
+                    stacks[caller_seat] = max(0, stacks[caller_seat] - push_size)
+                    if stacks[caller_seat] == 0:
+                        alive.remove(caller_seat)
+                        finish_order.append(caller_seat)
+
+            if len(alive) <= 1:
+                break
+            bb_seat = self._next_seat(bb_seat, alive)
 
         # Last player standing wins
         winner_seat = alive[0]

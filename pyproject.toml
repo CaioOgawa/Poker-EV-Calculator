@@ -21,7 +21,9 @@ dependencies = [
 [project.optional-dependencies]
 charts = ["matplotlib>=3.8.0"]
 vision = ["opencv-python>=4.9.0", "pytesseract>=0.3.10", "Pillow>=10.3.0"]
-dev = ["pytest>=8.1.0", "pytest-cov>=5.0.0", "ruff", "pre-commit"]
+# dev pulls in charts so output/ tests exercise the real matplotlib code path
+# in CI, not just the ImportError guard. vision stays opt-in (heavier deps).
+dev = ["pytest>=8.1.0", "pytest-cov>=5.0.0", "ruff", "pre-commit", "mypy", "poker-ev-calculator[charts]"]
 
 [project.scripts]
 poker = "cli.main:app"
@@ -40,3 +42,14 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+# treys has no type stubs, so its return values surface as Any; enabling
+# --strict's warn-return-any here would mostly flag that friction rather
+# than real bugs. Scoped to core/ and engine/ — where the BB/[0,1]/$ unit
+# contracts matter most — via `mypy core engine`, not enforced project-wide.

@@ -65,6 +65,7 @@ def test_no_duplicates():
 # Invalid tokens must raise, not silently disappear from the range
 # ------------------------------------------------------------------
 
+
 def test_invalid_rank_raises():
     with pytest.raises(ValueError):
         p.parse("AXs")

@@ -1,4 +1,5 @@
 """Parse poker range notation (e.g. 'AA,KK,AKs,AQo+') into hand combos."""
+
 from __future__ import annotations
 from itertools import product
 
@@ -68,9 +69,7 @@ class RangeParser:
 
         if token[0] == token[1]:
             if suited or offsuit:
-                raise ValueError(
-                    f"Pocket pairs cannot use a suited/offsuit suffix: {original!r}"
-                )
+                raise ValueError(f"Pocket pairs cannot use a suited/offsuit suffix: {original!r}")
             # Pocket pair: AA or AA+
             return self._pair_range(token[0], plus)
 
@@ -120,17 +119,16 @@ class RangeParser:
     ) -> list[tuple[str, str]]:
         """Parse JTs-87s or 22-66 style ranges."""
         original = token if original is None else original
-        left, right = token[:dash], token[dash + 1:]
+        left, right = token[:dash], token[dash + 1 :]
         if not left or not right:
             raise ValueError(f"Invalid range token: {original!r}")
 
         # Pocket pair range: 22-66
-        if (len(left) == 2 and left[0] == left[1] and
-                len(right) == 2 and right[0] == right[1]):
+        if len(left) == 2 and left[0] == left[1] and len(right) == 2 and right[0] == right[1]:
             self._validate_ranks(left[0] + right[0], original)
             lo = min(_RANK_IDX[left[0]], _RANK_IDX[right[0]])
             hi = max(_RANK_IDX[left[0]], _RANK_IDX[right[0]])
-            return [c for r in RANKS[lo:hi + 1] for c in _pair_combos(r)]
+            return [c for r in RANKS[lo : hi + 1] for c in _pair_combos(r)]
 
         # Connector range: JTs-87s or JTo-87o
         suited = left.endswith("s") and right.endswith("s")
@@ -146,9 +144,7 @@ class RangeParser:
             raise ValueError(f"Invalid range token: {original!r}")
         self._validate_ranks(l_ranks + r_ranks, original)
         if l_ranks[0] == l_ranks[1] or r_ranks[0] == r_ranks[1]:
-            raise ValueError(
-                f"Use pair range syntax (e.g. 22-66) for pairs: {original!r}"
-            )
+            raise ValueError(f"Use pair range syntax (e.g. 22-66) for pairs: {original!r}")
 
         hi_l, lo_l = sorted([_RANK_IDX[l_ranks[0]], _RANK_IDX[l_ranks[1]]], reverse=True)
         hi_r, lo_r = sorted([_RANK_IDX[r_ranks[0]], _RANK_IDX[r_ranks[1]]], reverse=True)

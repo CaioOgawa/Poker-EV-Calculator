@@ -4,6 +4,7 @@ Complexity: O(n * 2^n) with memoization, viable through ~15 players.
 The old permutations-based approach was O(n!) and also had a correctness bug
 (joint probability overcounting for earlier finishers).
 """
+
 from __future__ import annotations
 from functools import lru_cache
 
@@ -24,7 +25,7 @@ class ICMModel:
         n_active = len(active)
 
         @lru_cache(maxsize=None)
-        def _ev(player: int, remaining: frozenset) -> float:
+        def _ev(player: int, remaining: frozenset[int]) -> float:
             # How many places have already been assigned in this branch?
             place = n_active - len(remaining)
             if place >= len(payouts_t):

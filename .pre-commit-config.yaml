@@ -10,7 +10,7 @@ repos:
     hooks:
       - id: pytest-fast
         name: pytest (fast — skips slow Monte Carlo suites)
-        entry: python -m pytest tests/unit/ -m "not slow" -q --no-cov
+        entry: .venv/bin/python -m pytest tests/unit/ -m "not slow" -q --no-cov
         language: system
         pass_filenames: false
         always_run: true

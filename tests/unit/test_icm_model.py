@@ -4,6 +4,7 @@ Reference values computed with the correct O(n!) formula:
     for perm in permutations: compute full perm_prob, then assign payouts.
 All sums verified to equal 1.0 (or < 1 when busted players exhaust payouts early).
 """
+
 import time
 import random
 from engine.icm.model import ICMModel
@@ -17,7 +18,7 @@ def test_equal_stacks_symmetric():
     eq = m.equity([1000, 1000, 1000], [0.5, 0.3, 0.2])
     assert len(eq) == 3
     for e in eq:
-        assert abs(e - 1/3) < TOL
+        assert abs(e - 1 / 3) < TOL
 
 
 def test_chip_leader_gets_more():

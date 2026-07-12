@@ -1,4 +1,5 @@
 """ROI, BB/100, and variance confidence interval calculators."""
+
 from __future__ import annotations
 import math
 from scipy.stats import norm

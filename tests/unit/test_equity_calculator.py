@@ -3,6 +3,7 @@
 Reference equities from Equilab / PokerStove (preflop, all-in, random runout).
 Monte Carlo tolerance: ±2% at 50k iterations with fixed seed.
 """
+
 import pytest
 from core.equity.calculator import EquityCalculator
 
@@ -18,6 +19,7 @@ calc = EquityCalculator(iterations=ITERS, seed=SEED)
 # ------------------------------------------------------------------
 # heads_up — known hand vs known hand
 # ------------------------------------------------------------------
+
 
 def test_aa_vs_kk():
     # Reference: ~81.9% (Equilab)
@@ -59,6 +61,7 @@ def test_heads_up_dominated_hand():
 # vs_range — hero hand vs villain range string
 # ------------------------------------------------------------------
 
+
 def test_vs_range_aa_vs_top_hands():
     # AA vs JJ+,AKs — AA should be around 80%
     eq = calc.vs_range(["As", "Ad"], "JJ+,AKs", seed=SEED)
@@ -81,6 +84,7 @@ def test_vs_range_fully_blocked_raises():
 # ------------------------------------------------------------------
 # multi_way
 # ------------------------------------------------------------------
+
 
 def test_multi_way_equities_sum_to_one():
     equities = calc.multi_way(
@@ -112,6 +116,7 @@ def test_multi_way_two_players_matches_heads_up():
 # ------------------------------------------------------------------
 # range_vs_range
 # ------------------------------------------------------------------
+
 
 def test_range_vs_range_sums_to_one():
     eq_a, eq_b = calc.range_vs_range("AA,KK", "QQ,JJ", seed=SEED)

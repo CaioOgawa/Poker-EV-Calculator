@@ -1,4 +1,5 @@
 """Tests for ICMPressure (bubble factor) and ICMNash (HU push/fold)."""
+
 import pytest
 from engine.icm import ICMPressure, ICMNash, HAND_RANK
 
@@ -91,6 +92,7 @@ def test_hand_rank_starts_with_aa():
 
 def test_solve_hu_returns_nashresult():
     from engine.icm.nash import NashResult
+
     result = nash.solve_hu([2000, 8000], [0.65, 0.35], sb=50, bb=100, max_iter=2)
     assert isinstance(result, NashResult)
 
@@ -135,3 +137,13 @@ def test_solve_hu_push_threshold_matches_range_length():
         assert result.push_threshold == len(result.push_range) - 1
     else:
         assert result.push_threshold == -1
+
+
+def test_solve_hu_deep_stacks_converges_to_stable_range():
+    # Regression: best-response iteration at [6000, 4000] (60bb/40bb) doesn't
+    # settle at a fixed point — it orbits a 3-state cycle ranging from a
+    # near-empty push range to "shove every hand", depending purely on where
+    # max_iter happened to cut off. The cycle-averaging fix should report a
+    # stable, moderate range regardless of max_iter.
+    result = nash.solve_hu([6000, 4000], [0.65, 0.35], sb=50, bb=100)
+    assert 20 < len(result.push_range) < 150

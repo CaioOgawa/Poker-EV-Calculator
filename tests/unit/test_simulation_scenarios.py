@@ -1,4 +1,5 @@
 """Tests for TournamentSim and BankrollSimulator.simulate_multitable."""
+
 import pytest
 
 from simulation.scenarios.tournament import TournamentSim, TournamentResult
@@ -20,6 +21,26 @@ SIM = TournamentSim(
     num_trials=1000,
     seed=42,
 )
+
+
+# ------------------------------------------------------------------
+# _next_seat — seat-identity blind rotation (regression for index-based bug)
+# ------------------------------------------------------------------
+
+
+def test_next_seat_skips_busted_seats():
+    # Seat 1 busted (not in alive) — rotation must skip straight to seat 2,
+    # not repeat seat 0 or land on a stale index.
+    assert TournamentSim._next_seat(0, [0, 2, 3]) == 2
+
+
+def test_next_seat_wraps_around():
+    assert TournamentSim._next_seat(3, [0, 2, 3]) == 0
+
+
+def test_next_seat_handles_current_seat_already_removed():
+    # current (1) just busted this hand and is no longer in alive.
+    assert TournamentSim._next_seat(1, [0, 2, 3]) == 2
 
 
 def test_run_returns_tournament_result():
@@ -93,12 +114,8 @@ def test_avg_finish_symmetric_with_equal_equity():
 
 def test_larger_stack_improves_avg_finish():
     # Bigger stack → should finish better on average
-    small = TournamentSim(
-        num_players=6, starting_stack=5_000, num_trials=300, seed=5
-    ).run()
-    large = TournamentSim(
-        num_players=6, starting_stack=20_000, num_trials=300, seed=5
-    ).run()
+    small = TournamentSim(num_players=6, starting_stack=5_000, num_trials=300, seed=5).run()
+    large = TournamentSim(num_players=6, starting_stack=20_000, num_trials=300, seed=5).run()
     assert large.avg_finish <= small.avg_finish + 0.5
 
 
@@ -118,9 +135,14 @@ BS = BankrollSimulator()
 
 def test_multitable_returns_simresult():
     from risk.bankroll.simulator import SimResult
+
     result = BS.simulate_multitable(
-        num_tables=2, winrate_per_100=5.0, std_per_100=80.0,
-        starting_bankroll=200.0, num_sessions=100, num_careers=500,
+        num_tables=2,
+        winrate_per_100=5.0,
+        std_per_100=80.0,
+        starting_bankroll=200.0,
+        num_sessions=100,
+        num_careers=500,
     )
     assert isinstance(result, SimResult)
 
@@ -128,12 +150,21 @@ def test_multitable_returns_simresult():
 def test_multitable_scales_winrate():
     # 2 tables → 2x EV → higher median final bankroll
     single = BS.simulate(
-        winrate_per_100=5.0, std_per_100=80.0, starting_bankroll=200.0,
-        num_sessions=100, num_careers=1000, seed=0,
+        winrate_per_100=5.0,
+        std_per_100=80.0,
+        starting_bankroll=200.0,
+        num_sessions=100,
+        num_careers=1000,
+        seed=0,
     )
     multi = BS.simulate_multitable(
-        num_tables=2, winrate_per_100=5.0, std_per_100=80.0,
-        starting_bankroll=200.0, num_sessions=100, num_careers=1000, seed=0,
+        num_tables=2,
+        winrate_per_100=5.0,
+        std_per_100=80.0,
+        starting_bankroll=200.0,
+        num_sessions=100,
+        num_careers=1000,
+        seed=0,
     )
     assert multi.mean_final > single.mean_final
 
@@ -141,24 +172,45 @@ def test_multitable_scales_winrate():
 def test_multitable_more_tables_more_variance():
     # More tables → higher variance → higher p95 and lower p5 spread
     single = BS.simulate_multitable(
-        num_tables=1, winrate_per_100=5.0, std_per_100=80.0,
-        starting_bankroll=500.0, num_sessions=100, num_careers=2000, seed=1,
+        num_tables=1,
+        winrate_per_100=5.0,
+        std_per_100=80.0,
+        starting_bankroll=500.0,
+        num_sessions=100,
+        num_careers=2000,
+        seed=1,
     )
     quad = BS.simulate_multitable(
-        num_tables=4, winrate_per_100=5.0, std_per_100=80.0,
-        starting_bankroll=500.0, num_sessions=100, num_careers=2000, seed=1,
+        num_tables=4,
+        winrate_per_100=5.0,
+        std_per_100=80.0,
+        starting_bankroll=500.0,
+        num_sessions=100,
+        num_careers=2000,
+        seed=1,
     )
     assert quad.p95[-1] > single.p95[-1]
 
 
 def test_multitable_seed_reproducible():
     r1 = BS.simulate_multitable(
-        num_tables=2, winrate_per_100=5.0, std_per_100=80.0,
-        starting_bankroll=200.0, num_sessions=50, num_careers=200, seed=99,
+        num_tables=2,
+        winrate_per_100=5.0,
+        std_per_100=80.0,
+        starting_bankroll=200.0,
+        num_sessions=50,
+        num_careers=200,
+        seed=99,
     )
     r2 = BS.simulate_multitable(
-        num_tables=2, winrate_per_100=5.0, std_per_100=80.0,
-        starting_bankroll=200.0, num_sessions=50, num_careers=200, seed=99,
+        num_tables=2,
+        winrate_per_100=5.0,
+        std_per_100=80.0,
+        starting_bankroll=200.0,
+        num_sessions=50,
+        num_careers=200,
+        seed=99,
     )
     import numpy as np
+
     np.testing.assert_array_equal(r1.p50, r2.p50)

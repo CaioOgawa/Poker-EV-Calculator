@@ -3,16 +3,17 @@
 All bankroll inputs in dollars; winrate and std in BB/100.
 RoR is computed by converting dollar bankroll → BBs at each stake.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 from risk.bankroll.ror import RiskOfRuin
 
 STANDARD_STAKES: list[tuple[str, float]] = [
-    ("NL2",   0.02),
-    ("NL5",   0.05),
-    ("NL10",  0.10),
-    ("NL25",  0.25),
-    ("NL50",  0.50),
+    ("NL2", 0.02),
+    ("NL5", 0.05),
+    ("NL10", 0.10),
+    ("NL25", 0.25),
+    ("NL50", 0.50),
     ("NL100", 1.00),
     ("NL200", 2.00),
     ("NL500", 5.00),
@@ -22,12 +23,12 @@ STANDARD_STAKES: list[tuple[str, float]] = [
 
 @dataclass
 class StakeRecommendation:
-    stake_name: str       # e.g. "NL50"
-    bb_size: float        # big blind in dollars
-    bankroll_in_bb: float # bankroll expressed in BBs at this stake
-    ror: float            # risk of ruin at this stake (0–1)
-    buy_ins: float        # bankroll / (buy_in_bbs * bb_size)
-    ev_per_hour: float    # expected $/hour at hands_per_hour
+    stake_name: str  # e.g. "NL50"
+    bb_size: float  # big blind in dollars
+    bankroll_in_bb: float  # bankroll expressed in BBs at this stake
+    ror: float  # risk of ruin at this stake (0–1)
+    buy_ins: float  # bankroll / (buy_in_bbs * bb_size)
+    ev_per_hour: float  # expected $/hour at hands_per_hour
 
 
 class StakeRecommender:
@@ -62,15 +63,29 @@ class StakeRecommender:
         best: StakeRecommendation | None = None
 
         for name, bb_size in available:
-            rec = self._build(name, bb_size, bankroll_dollars, winrate_per_100,
-                              std_per_100, buy_in_bbs, hands_per_hour)
+            rec = self._build(
+                name,
+                bb_size,
+                bankroll_dollars,
+                winrate_per_100,
+                std_per_100,
+                buy_in_bbs,
+                hands_per_hour,
+            )
             if rec.ror <= max_ror:
                 best = rec  # keep iterating — higher stakes may still qualify
 
         if best is None:
             name, bb_size = available[0]
-            best = self._build(name, bb_size, bankroll_dollars, winrate_per_100,
-                               std_per_100, buy_in_bbs, hands_per_hour)
+            best = self._build(
+                name,
+                bb_size,
+                bankroll_dollars,
+                winrate_per_100,
+                std_per_100,
+                buy_in_bbs,
+                hands_per_hour,
+            )
 
         return best
 
@@ -86,8 +101,15 @@ class StakeRecommender:
         """Return RoR analysis for every available stake."""
         available = stakes or STANDARD_STAKES
         return [
-            self._build(name, bb_size, bankroll_dollars, winrate_per_100,
-                        std_per_100, buy_in_bbs, hands_per_hour)
+            self._build(
+                name,
+                bb_size,
+                bankroll_dollars,
+                winrate_per_100,
+                std_per_100,
+                buy_in_bbs,
+                hands_per_hour,
+            )
             for name, bb_size in available
         ]
 

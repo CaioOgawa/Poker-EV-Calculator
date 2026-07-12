@@ -1,4 +1,5 @@
 """Monte Carlo runner for EV distributions and variance analysis."""
+
 from __future__ import annotations
 import random
 from dataclasses import dataclass, field
@@ -41,7 +42,7 @@ class MonteCarloSim:
         n = len(results_sorted)
         mean = sum(results) / n
         variance = sum((x - mean) ** 2 for x in results) / n
-        std = variance ** 0.5
+        std = variance**0.5
         return MonteCarloResult(
             iterations=n,
             mean_ev=mean,

@@ -2,8 +2,9 @@ VENV := .venv/bin
 PYTHON := $(VENV)/python
 PYTEST := $(VENV)/pytest
 RUFF := $(VENV)/ruff
+MYPY := $(VENV)/mypy
 
-.PHONY: install test lint fmt check graph clean
+.PHONY: install test test-fast test-cov lint fmt typecheck check graph clean
 
 install:
 	python3 -m venv .venv
@@ -12,6 +13,9 @@ install:
 
 test:
 	$(PYTEST) tests/ -v --no-cov
+
+test-fast:
+	$(PYTEST) tests/ -v --no-cov -m "not slow"
 
 test-cov:
 	$(PYTEST) tests/ --cov --cov-report=term-missing
@@ -22,7 +26,10 @@ lint:
 fmt:
 	$(RUFF) format .
 
-check: lint test
+typecheck:
+	$(MYPY) core engine
+
+check: lint typecheck test
 
 graph:
 	claude /graphify .

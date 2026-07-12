@@ -4,6 +4,7 @@ All monetary values are in big blinds (BBs). Dollars appear only when
 converting in StakeRecommender. winrate and std must share the same unit
 base: BB/100 hands.
 """
+
 from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
@@ -11,12 +12,12 @@ import numpy as np
 
 @dataclass
 class SimResult:
-    hands: np.ndarray   # x-axis: cumulative hand counts (length num_sessions + 1)
-    p5: np.ndarray      # 5th-percentile bankroll curve
-    p50: np.ndarray     # median bankroll curve
-    p95: np.ndarray     # 95th-percentile bankroll curve
-    ruin_rate: float    # fraction of careers that hit ruin_threshold
-    mean_final: float   # mean final bankroll across all careers
+    hands: np.ndarray  # x-axis: cumulative hand counts (length num_sessions + 1)
+    p5: np.ndarray  # 5th-percentile bankroll curve
+    p50: np.ndarray  # median bankroll curve
+    p95: np.ndarray  # 95th-percentile bankroll curve
+    ruin_rate: float  # fraction of careers that hit ruin_threshold
+    mean_final: float  # mean final bankroll across all careers
 
 
 class BankrollSimulator:
@@ -96,6 +97,7 @@ class BankrollSimulator:
         linearly; combined std scales by sqrt(num_tables) (independent tables).
         """
         import math
+
         combined_wr = winrate_per_100 * num_tables
         combined_std = std_per_100 * math.sqrt(num_tables)
         return self.simulate(

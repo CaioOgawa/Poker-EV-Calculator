@@ -9,6 +9,7 @@ BF > 1 always (ICM punishes busting more than it rewards winning).
 BF near 1 = chip leader, little pressure.
 BF >> 1 = short stack near the bubble.
 """
+
 from __future__ import annotations
 from engine.icm.model import ICMModel
 
@@ -65,10 +66,7 @@ class ICMPressure:
         """
         n = len(stacks)
         return [
-            [
-                1.0 if i == j else self.bubble_factor(stacks, payouts, i, j)
-                for j in range(n)
-            ]
+            [1.0 if i == j else self.bubble_factor(stacks, payouts, i, j) for j in range(n)]
             for i in range(n)
         ]
 

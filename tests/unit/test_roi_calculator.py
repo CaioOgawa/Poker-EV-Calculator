@@ -2,6 +2,7 @@
 
 All reference values computed by hand and verified before being hardcoded.
 """
+
 import math
 import pytest
 from risk.roi.calculator import ROICalculator, CashGameStats, VarianceCI
@@ -14,6 +15,7 @@ vci = VarianceCI()
 # ------------------------------------------------------------------
 # ROICalculator
 # ------------------------------------------------------------------
+
 
 def test_roi_positive():
     # Invested 500, won 700 → ROI = (700-500)/500 = 0.40
@@ -61,6 +63,7 @@ def test_itm_all_cash():
 # CashGameStats — BB/100
 # ------------------------------------------------------------------
 
+
 def test_bb_per_100_from_bb():
     # 750 bb won over 100k hands = 0.75 bb/100
     result = cash.bb_per_100(winnings_bb=750.0, hands=100_000)
@@ -92,6 +95,7 @@ def test_bb_per_100_zero_hands_raises():
 # ------------------------------------------------------------------
 # VarianceCI
 # ------------------------------------------------------------------
+
 
 def test_ci_95_wide_sample():
     # wr=6, std=100, 100k hands
@@ -126,6 +130,7 @@ def test_ci_invalid_confidence_raises():
 
 def test_hands_for_margin():
     from scipy.stats import norm as _norm
+
     # std=100, target margin=1 bb/100 at 95%
     n = vci.hands_for_margin(target_margin=1.0, std_per_100=100.0)
     z = _norm.ppf(0.975)

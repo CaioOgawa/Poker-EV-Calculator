@@ -1,3 +1,7 @@
-# GTO approximation stubs — full solver integration via poker-quant skill
-# auto-hook test Tue Apr 28 11:51:15 -03 2026
-# push test
+"""GTO approximation — preflop chart loading and mixed-strategy sampling."""
+
+from engine.gto.chart import PreflopChart
+from engine.gto.mixed_strategy import MixedStrategy
+from engine.gto.solver_bridge import NotImplementedBridge, SolverBridge
+
+__all__ = ["PreflopChart", "MixedStrategy", "SolverBridge", "NotImplementedBridge"]

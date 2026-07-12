@@ -1,4 +1,5 @@
 """HandEvaluator tests — hand_class, outs, draw_strength."""
+
 from core.hand_evaluator import HandEvaluator
 
 ev = HandEvaluator()
@@ -7,6 +8,7 @@ ev = HandEvaluator()
 # ------------------------------------------------------------------
 # hand_class
 # ------------------------------------------------------------------
+
 
 def test_hand_class_royal_flush():
     assert ev.hand_class(["As", "Ks"], ["Qs", "Js", "Ts"]) == "Royal Flush"
@@ -52,6 +54,7 @@ def test_hand_class_high_card():
 # ------------------------------------------------------------------
 # outs — class-based: a card is an out only if it moves to a better hand CLASS
 # ------------------------------------------------------------------
+
 
 def test_outs_flush_draw_hearts_all_present():
     # 4 hearts on flop — all 9 remaining hearts complete the flush (Flush > High Card)
@@ -113,6 +116,7 @@ def test_outs_no_dead_cards_in_outs():
 # ------------------------------------------------------------------
 # draw_strength
 # ------------------------------------------------------------------
+
 
 def test_draw_strength_flush_draw():
     # Ah2h on 3h7hKd: 23 class-improving outs out of 47 unseen cards

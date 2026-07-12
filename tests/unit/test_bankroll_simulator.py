@@ -1,4 +1,5 @@
 """Tests for BankrollSimulator and StakeRecommender."""
+
 import pytest
 import numpy as np
 from risk.bankroll import (
@@ -18,6 +19,7 @@ START = 100.0  # BBs
 # ------------------------------------------------------------------
 # BankrollSimulator
 # ------------------------------------------------------------------
+
 
 def _sim(**kwargs):
     defaults = dict(
@@ -106,9 +108,9 @@ def test_sim_mean_final_is_float():
 # ------------------------------------------------------------------
 
 REC = StakeRecommender()
-BANKROLL = 500.0   # dollars
-WR = 5.0           # BB/100
-STD = 80.0         # BB/100
+BANKROLL = 500.0  # dollars
+WR = 5.0  # BB/100
+STD = 80.0  # BB/100
 
 
 def test_recommend_returns_recommendation():
@@ -149,6 +151,7 @@ def test_recommend_buy_ins_positive():
 
 def test_all_stakes_length():
     from risk.bankroll import STANDARD_STAKES
+
     analysis = REC.all_stakes_analysis(BANKROLL, WR, STD)
     assert len(analysis) == len(STANDARD_STAKES)
 

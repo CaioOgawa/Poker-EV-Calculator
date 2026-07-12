@@ -1,10 +1,12 @@
 """OCR-based card and number reader using Tesseract + template matching."""
+
 from __future__ import annotations
 from pathlib import Path
 
 try:
     import pytesseract
     from PIL import Image
+
     OCR_AVAILABLE = True
 except ImportError:
     OCR_AVAILABLE = False

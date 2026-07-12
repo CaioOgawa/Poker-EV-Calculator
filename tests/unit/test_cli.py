@@ -1,4 +1,5 @@
 """CLI integration tests using Typer's CliRunner."""
+
 import json
 import pytest
 from typer.testing import CliRunner
@@ -9,6 +10,7 @@ runner = CliRunner()
 
 
 # ── eval ──────────────────────────────────────────────────────────────────────
+
 
 def test_eval_straight_flush():
     result = runner.invoke(app, ["eval", "--hero", "AsKs", "--board", "QsJsTs"])
@@ -37,6 +39,7 @@ def test_eval_json_rank_positive():
 
 
 # ── equity ────────────────────────────────────────────────────────────────────
+
 
 def test_equity_vs_range():
     result = runner.invoke(app, ["equity", "--hero", "AsKs", "--villain", "QQ+,AKs"])
@@ -73,6 +76,7 @@ def test_equity_with_board():
 
 # ── icm ───────────────────────────────────────────────────────────────────────
 
+
 def test_icm_output_has_table():
     result = runner.invoke(app, ["icm", "--stacks", "5000,3000,2000", "--payouts", "0.5,0.3,0.2"])
     assert result.exit_code == 0, result.output
@@ -102,9 +106,12 @@ def test_icm_json_value_uses_total():
         app,
         [
             "icm",
-            "--stacks", "5000,5000",
-            "--payouts", "0.6,0.4",
-            "--total", "2000",
+            "--stacks",
+            "5000,5000",
+            "--payouts",
+            "0.6,0.4",
+            "--total",
+            "2000",
             "--json",
         ],
     )
@@ -115,6 +122,7 @@ def test_icm_json_value_uses_total():
 
 
 # ── roi ───────────────────────────────────────────────────────────────────────
+
 
 def test_roi_output_contains_roi():
     result = runner.invoke(app, ["roi", "--buyins", "100,100,100", "--cashes", "0,200,500"])
@@ -137,8 +145,6 @@ def test_roi_json_values():
 
 
 def test_roi_json_negative_roi():
-    result = runner.invoke(
-        app, ["roi", "--buyins", "100,100,100", "--cashes", "0,0,50", "--json"]
-    )
+    result = runner.invoke(app, ["roi", "--buyins", "100,100,100", "--cashes", "0,0,50", "--json"])
     data = json.loads(result.output)
     assert data["roi"] < 0

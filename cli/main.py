@@ -1,4 +1,5 @@
 """Poker EV Calculator CLI — eval, equity, icm, roi commands."""
+
 from __future__ import annotations
 
 import json as _json
@@ -38,8 +39,10 @@ def _is_hand(s: str) -> bool:
     """Return True if s looks like exactly two specific cards (e.g. 'AsKd')."""
     return (
         len(s) == 4
-        and s[0] in _RANKS and s[1] in _SUITS
-        and s[2] in _RANKS and s[3] in _SUITS
+        and s[0] in _RANKS
+        and s[1] in _SUITS
+        and s[2] in _RANKS
+        and s[3] in _SUITS
         and s[:2] != s[2:]
     )
 
@@ -148,8 +151,12 @@ def equity(
 
 @app.command()
 def icm(
-    stacks: str = typer.Option(..., "--stacks", help="Comma-separated stack sizes, e.g. 5000,3000,2000"),
-    payouts: str = typer.Option(..., "--payouts", help="Comma-separated payout fractions, e.g. 0.5,0.3,0.2"),
+    stacks: str = typer.Option(
+        ..., "--stacks", help="Comma-separated stack sizes, e.g. 5000,3000,2000"
+    ),
+    payouts: str = typer.Option(
+        ..., "--payouts", help="Comma-separated payout fractions, e.g. 0.5,0.3,0.2"
+    ),
     total: float = typer.Option(1000.0, "--total", help="Total prize pool in $"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -200,7 +207,9 @@ def icm(
 @app.command()
 def roi(
     buyins: str = typer.Option(..., "--buyins", help="Comma-separated buy-ins, e.g. 100,100,100"),
-    cashes: str = typer.Option(..., "--cashes", help="Comma-separated cash amounts, e.g. 0,200,500"),
+    cashes: str = typer.Option(
+        ..., "--cashes", help="Comma-separated cash amounts, e.g. 0,200,500"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Calculate tournament ROI and ITM rate."""

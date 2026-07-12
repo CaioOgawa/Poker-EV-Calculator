@@ -1,4 +1,5 @@
 """Risk of Ruin calculator."""
+
 from __future__ import annotations
 import math
 
@@ -11,10 +12,10 @@ class RiskOfRuin:
         """
         if std_dev <= 0 or win_rate <= 0:
             return 1.0
-        return math.exp(-2 * win_rate * bankroll / (std_dev ** 2))
+        return math.exp(-2 * win_rate * bankroll / (std_dev**2))
 
     def required_bankroll(self, win_rate: float, std_dev: float, target_ror: float = 0.01) -> float:
         """Bankroll needed to achieve a target risk of ruin."""
         if win_rate <= 0:
             return float("inf")
-        return (-math.log(target_ror) * std_dev ** 2) / (2 * win_rate)
+        return (-math.log(target_ror) * std_dev**2) / (2 * win_rate)

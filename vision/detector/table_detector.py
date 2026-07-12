@@ -1,9 +1,11 @@
 """Detect and extract poker table regions from screenshots using OpenCV."""
+
 from __future__ import annotations
 from pathlib import Path
 
 try:
     import cv2
+
     CV2_AVAILABLE = True
 except ImportError:
     CV2_AVAILABLE = False

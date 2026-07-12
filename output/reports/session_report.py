@@ -1,4 +1,5 @@
 """Generate session EV and ROI reports."""
+
 from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -22,8 +23,6 @@ class SessionReport:
         self.hands.append(hand)
 
     def summary(self) -> dict:
-        if not self.hands:
-            return {}
         total_result = sum(h.result for h in self.hands)
         total_ev = sum(h.ev for h in self.hands)
         return {

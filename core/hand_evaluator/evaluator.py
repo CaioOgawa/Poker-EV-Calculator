@@ -1,10 +1,11 @@
 """Hand strength evaluator using treys."""
+
 from __future__ import annotations
 from treys import Evaluator, Card, Deck
 
 
 class HandEvaluator:
-    def __init__(self):
+    def __init__(self) -> None:
         self._eval = Evaluator()
 
     def rank(self, hole: list[str], board: list[str]) -> int:
@@ -66,7 +67,8 @@ class HandEvaluator:
             return 0.0
 
         improving = sum(
-            1 for c in unseen
+            1
+            for c in unseen
             if self._eval.get_rank_class(self._eval.evaluate(b_ints + [c], h_ints)) < current_class
         )
         return improving / len(unseen)
