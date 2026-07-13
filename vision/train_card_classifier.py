@@ -1,8 +1,10 @@
-"""Train the poker table YOLOv8 detector on an annotated dataset.
+"""Train a card classifier on the reorganized ImageFolder card crops.
+
+Run `python -m vision.prepare_card_classifier_data` first to build
+`vision/data/processed/cards/{train,val,test}/<class_name>/*.jpg`.
 
 Usage:
-    python -m vision.train_detector
-    python -m vision.train_detector --data vision/data/raw/cards/data.yaml --epochs 50
+    python -m vision.train_card_classifier
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ try:
 except ImportError:
     ULTRALYTICS_AVAILABLE = False
 
-DEFAULT_DATA = Path(__file__).parent / "data" / "raw" / "pokerstars" / "data.yaml"
+DEFAULT_DATA = Path(__file__).parent / "data" / "processed" / "cards"
 DEFAULT_PROJECT = Path(__file__).parent / "models"
 
 
@@ -31,20 +33,20 @@ def _default_device() -> str:
 
 
 def train(
-    data_yaml: str | Path = DEFAULT_DATA,
-    epochs: int = 100,
-    imgsz: int = 640,
-    base_model: str = "yolov8n.pt",
+    data_dir: str | Path = DEFAULT_DATA,
+    epochs: int = 50,
+    imgsz: int = 64,
+    base_model: str = "yolov8n-cls.pt",
     project: str | Path = DEFAULT_PROJECT,
-    name: str = "table_detector",
+    name: str = "card_classifier",
     device: str | None = None,
 ) -> Path:
-    """Fine-tune a YOLOv8n model on `data_yaml`. Returns the path to best.pt."""
+    """Fine-tune a YOLOv8n classifier on `data_dir`. Returns the path to best.pt."""
     if not ULTRALYTICS_AVAILABLE:
         raise ImportError("ultralytics required — pip install -e '.[vision]'")
     model = YOLO(base_model)
     model.train(
-        data=str(data_yaml),
+        data=str(data_dir),
         epochs=epochs,
         imgsz=imgsz,
         project=str(project),
@@ -56,16 +58,16 @@ def train(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", default=DEFAULT_DATA, help="path to data.yaml")
-    parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--imgsz", type=int, default=640)
-    parser.add_argument("--model", default="yolov8n.pt", help="base checkpoint to fine-tune")
-    parser.add_argument("--name", default="table_detector", help="run name under vision/models/")
+    parser.add_argument("--data", default=DEFAULT_DATA, help="path to ImageFolder root")
+    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--imgsz", type=int, default=64, help="crops are tiny, no need for 640")
+    parser.add_argument("--model", default="yolov8n-cls.pt", help="base checkpoint to fine-tune")
+    parser.add_argument("--name", default="card_classifier", help="run name under vision/models/")
     parser.add_argument("--device", default=None, help="mps/cpu/0 — auto-detected if omitted")
     args = parser.parse_args()
 
     best = train(
-        data_yaml=args.data,
+        data_dir=args.data,
         epochs=args.epochs,
         imgsz=args.imgsz,
         base_model=args.model,
