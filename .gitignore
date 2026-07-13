@@ -49,6 +49,7 @@ data/processed/
 *.mp4
 *.avi
 models/weights/
+vision/models/
 *.pt
 *.pth
 *.onnx

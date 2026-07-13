@@ -1,0 +1,14 @@
+path: .
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 81
+names: ['0in', '10c', '10d', '10h', '10s', '1in', '2c', '2d', '2h', '2in', '2s', '3c', '3d', '3h', '3in', '3s', '4c', '4d', '4h', '4in', '4s', '5c', '5d', '5h', '5in', '5s', '6c', '6d', '6h', '6s', '7c', '7d', '7h', '7s', '8c', '8d', '8h', '8s', '9c', '9d', '9h', '9s', 'ac', 'ad', 'ah', 'as', 'flop', 'jc', 'jd', 'jh', 'js', 'kc', 'kd', 'kh', 'ks', 'p0b', 'p0d', 'p0s', 'p1b', 'p1d', 'p1s', 'p2b', 'p2d', 'p2s', 'p3b', 'p3d', 'p3s', 'p4b', 'p4d', 'p4s', 'p5b', 'p5d', 'p5s', 'pot', 'qc', 'qd', 'qh', 'qs', 'river', 'table_bet', 'turn']
+
+roboflow:
+  workspace: caio-ogawa
+  project: pokerstars-olks2
+  version: dataset
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/caio-ogawa/pokerstars-olks2/dataset/dataset
