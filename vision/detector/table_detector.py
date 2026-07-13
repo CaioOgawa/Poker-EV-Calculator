@@ -42,7 +42,7 @@ def _to_treys(class_name: str) -> str | None:
 
 
 class TableDetector:
-    def __init__(self, weights: str | Path = _DEFAULT_WEIGHTS, confidence: float = 0.5):
+    def __init__(self, weights: str | Path = _DEFAULT_WEIGHTS, confidence: float = 0.4):
         self.weights = Path(weights)
         self.confidence = confidence
         self._model = None

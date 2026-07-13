@@ -72,11 +72,12 @@ class CardReader:
         class_name = result.names[result.probs.top1]
         return _to_treys(class_name)
 
-    def read_number(self, image_path: str | Path) -> float | None:
-        """Read a numeric value (pot size, stack) from a cropped region."""
+    def read_number(self, image: str | Path | Image.Image) -> float | None:
+        """Read a numeric value (pot size, stack) from a cropped region or an
+        already-loaded PIL image (e.g. a crop from a full table screenshot)."""
         if not OCR_AVAILABLE:
             raise ImportError("pytesseract and Pillow required for vision module")
-        img = Image.open(str(image_path))
+        img = image if isinstance(image, Image.Image) else Image.open(str(image))
         text = pytesseract.image_to_string(img, config="--psm 7 digits")
         try:
             return float(text.strip().replace(",", ""))
