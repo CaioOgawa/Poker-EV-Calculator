@@ -38,6 +38,15 @@ def test_eval_json_rank_positive():
     assert data["rank"] > 0
 
 
+def test_eval_table_top_percent_is_not_inverted():
+    # Royal flush: percentile() ~= 1.0 (nuts), so the displayed "Top X%"
+    # label must read close to 0%, not close to 100%.
+    result = runner.invoke(app, ["eval", "--hero", "AsKs", "--board", "QsJsTs"])
+    assert result.exit_code == 0, result.output
+    assert "Top 0.0%" in result.output
+    assert "Top 99.9%" not in result.output
+
+
 # ── equity ────────────────────────────────────────────────────────────────────
 
 

@@ -94,7 +94,9 @@ def eval_hand(
     table.add_column("Value")
     table.add_row("Hand Class", class_name)
     table.add_row("Treys Rank", str(rank))
-    table.add_row("Percentile", f"Top {result['percentile']}%")
+    # `percentile` is a strength score (1.0 = nuts), so "Top X%" is the
+    # complement — a Royal Flush is "Top 0.1%", not "Top 99.9%".
+    table.add_row("Percentile", f"Top {100 - result['percentile']:.1f}%")
     console.print(table)
 
 

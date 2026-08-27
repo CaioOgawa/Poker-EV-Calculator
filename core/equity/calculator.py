@@ -17,6 +17,23 @@ def _full_deck() -> list[int]:
     return list(Deck().cards)
 
 
+def _check_no_duplicates(groups: dict[str, list[str]]) -> None:
+    """Raise ValueError naming the card if the same card appears twice,
+    whether within one group (e.g. hero=['As','As']) or across groups
+    (e.g. the same card in both hero and board) — a silently-collapsed
+    duplicate feeds the same card to both hands and returns a plausible,
+    wrong equity instead of failing loudly.
+    """
+    seen: dict[str, str] = {}
+    for group_name, cards in groups.items():
+        for card in cards:
+            if card in seen:
+                raise ValueError(
+                    f"Duplicate card '{card}' in both {seen[card]!r} and {group_name!r}"
+                )
+            seen[card] = group_name
+
+
 class EquityCalculator:
     def __init__(self, iterations: int = 10_000, seed: int | None = None):
         self.iterations = iterations
@@ -36,8 +53,9 @@ class EquityCalculator:
         seed: int | None = None,
     ) -> float:
         """Hero equity [0, 1] vs a single known villain hand."""
-        rng = _random_mod.Random(seed) if seed is not None else self._rng
         board = board or []
+        _check_no_duplicates({"hero": hero, "villain": villain, "board": board})
+        rng = _random_mod.Random(seed) if seed is not None else self._rng
         hero_c = _to_cards(hero)
         villain_c = _to_cards(villain)
         board_c = _to_cards(board)
@@ -71,8 +89,9 @@ class EquityCalculator:
         Each iteration samples one combo from the villain range after removing
         combos blocked by hero cards or board cards.
         """
-        rng = _random_mod.Random(seed) if seed is not None else self._rng
         board = board or []
+        _check_no_duplicates({"hero": hero, "board": board})
+        rng = _random_mod.Random(seed) if seed is not None else self._rng
         hero_c = _to_cards(hero)
         board_c = _to_cards(board)
         hero_set = set(hero_c + board_c)
@@ -122,8 +141,9 @@ class EquityCalculator:
         every combo in range_b are skipped and excluded from the denominator
         (they carry no information about either range's equity).
         """
-        rng = _random_mod.Random(seed) if seed is not None else self._rng
         board = board or []
+        _check_no_duplicates({"board": board})
+        rng = _random_mod.Random(seed) if seed is not None else self._rng
         board_c = _to_cards(board)
         board_set = set(board_c)
 
@@ -178,8 +198,9 @@ class EquityCalculator:
         hands: list of hole-card lists, e.g. [['As','Kd'], ['Qh','Qc'], ['7s','8s']]
         Ties split equity equally among all tied players.
         """
-        rng = _random_mod.Random(seed) if seed is not None else self._rng
         board = board or []
+        _check_no_duplicates({f"hand {i}": h for i, h in enumerate(hands)} | {"board": board})
+        rng = _random_mod.Random(seed) if seed is not None else self._rng
         n = len(hands)
         hands_c = [_to_cards(h) for h in hands]
         board_c = _to_cards(board)
