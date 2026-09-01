@@ -1,4 +1,13 @@
-"""Monte Carlo equity calculator for heads-up and multi-way spots."""
+"""Equity calculator for heads-up and multi-way spots.
+
+Exact enumeration when 0 or 1 cards remain to be dealt (a complete or
+turn-complete board), Monte Carlo sampling otherwise
+(docs/AUDITORIA-2026-08-26.md item I1) — see each method's docstring.
+`range_vs_range` stays Monte Carlo-only regardless of `need`: it's built for
+range-vs-range spots (e.g. the 169x169 preflop equity table in
+`engine/icm/build_equity_table.py`), where exact combo-pair enumeration
+would multiply, not just add, the per-side combo counts.
+"""
 
 from __future__ import annotations
 import random as _random_mod
@@ -15,6 +24,15 @@ def _to_cards(strs: list[str]) -> list[int]:
 
 def _full_deck() -> list[int]:
     return list(Deck().cards)
+
+
+def _win_share(rank_a: int, rank_b: int) -> float:
+    """1.0/0.5/0.0 for a's share of a heads-up showdown (treys: lower rank wins)."""
+    if rank_a < rank_b:
+        return 1.0
+    if rank_a == rank_b:
+        return 0.5
+    return 0.0
 
 
 def _check_no_duplicates(groups: dict[str, list[str]]) -> None:
@@ -52,10 +70,18 @@ class EquityCalculator:
         *,
         seed: int | None = None,
     ) -> float:
-        """Hero equity [0, 1] vs a single known villain hand."""
+        """Hero equity [0, 1] vs a single known villain hand.
+
+        Exact, not Monte Carlo, whenever the board leaves 0 or 1 cards to
+        come (docs/AUDITORIA-2026-08-26.md item I1): a complete board is one
+        deterministic showdown, and a turn-complete board has at most 46
+        possible river cards — both cheap to enumerate outright, so there's
+        no sampling noise to pay for. `seed` is unused in both cases (no
+        randomness to seed). Falls back to Monte Carlo sampling only when 2+
+        cards remain (preflop/flop).
+        """
         board = board or []
         _check_no_duplicates({"hero": hero, "villain": villain, "board": board})
-        rng = _random_mod.Random(seed) if seed is not None else self._rng
         hero_c = _to_cards(hero)
         villain_c = _to_cards(villain)
         board_c = _to_cards(board)
@@ -63,17 +89,29 @@ class EquityCalculator:
 
         deck = [c for c in _full_deck() if c not in known]
         need = 5 - len(board_c)
-        wins = 0.0
 
+        if need == 0:
+            return _win_share(
+                self._eval.evaluate(board_c, hero_c), self._eval.evaluate(board_c, villain_c)
+            )
+        if need == 1:
+            wins = sum(
+                _win_share(
+                    self._eval.evaluate(board_c + [card], hero_c),
+                    self._eval.evaluate(board_c + [card], villain_c),
+                )
+                for card in deck
+            )
+            return wins / len(deck)
+
+        rng = _random_mod.Random(seed) if seed is not None else self._rng
+        wins = 0.0
         for _ in range(self.iterations):
             rng.shuffle(deck)
             run_board = board_c + deck[:need]
             h = self._eval.evaluate(run_board, hero_c)
             v = self._eval.evaluate(run_board, villain_c)
-            if h < v:
-                wins += 1.0
-            elif h == v:
-                wins += 0.5
+            wins += _win_share(h, v)
         return wins / self.iterations
 
     def vs_range(
@@ -86,12 +124,19 @@ class EquityCalculator:
     ) -> float:
         """Hero equity [0, 1] vs a villain range string (e.g. 'JJ+,AKs').
 
-        Each iteration samples one combo from the villain range after removing
-        combos blocked by hero cards or board cards.
+        Each combo in the range is equally likely a priori (`RangeParser`
+        already lists one entry per combo, so no extra weighting is needed),
+        after removing combos blocked by hero/board cards. With 2+ cards
+        still to come, one villain combo is sampled per Monte Carlo
+        iteration, then a random runout. With 0 or 1 cards to come
+        (docs/AUDITORIA-2026-08-26.md item I1), both the villain's combo and
+        the runout are enumerated exactly instead — a river-complete board
+        has only the combo itself to average over (≤ a few hundred, cheap),
+        and a turn-complete board adds at most 46 river cards per combo.
+        `seed` is unused in both exact cases (no randomness to seed).
         """
         board = board or []
         _check_no_duplicates({"hero": hero, "board": board})
-        rng = _random_mod.Random(seed) if seed is not None else self._rng
         hero_c = _to_cards(hero)
         board_c = _to_cards(board)
         hero_set = set(hero_c + board_c)
@@ -107,10 +152,40 @@ class EquityCalculator:
                 f"No unblocked combos in range '{villain_range}' given hero {hero} board {board}"
             )
 
-        deck_base = [c for c in _full_deck() if c not in hero_set]
         need = 5 - len(board_c)
-        wins = 0.0
 
+        if need == 0:
+            hero_rank = self._eval.evaluate(board_c, hero_c)
+            wins = sum(
+                _win_share(hero_rank, self._eval.evaluate(board_c, cards)) for cards, _ in available
+            )
+            return wins / len(available)
+
+        if need == 1:
+            # Average-of-averages, not a flat win/total ratio: the villain
+            # combo is uniform over `available` (matching the MC branch's
+            # `rng.choice(available)`), the runout is uniform *given* that
+            # combo. Each combo's own runout count varies with what its two
+            # cards block, so weighting by combo first and runout second
+            # inside that combo is what reproduces the MC estimator's
+            # weighting exactly — a flat accumulation would only coincide
+            # with this by every combo happening to have the same deck size.
+            per_combo_equity = []
+            for cards, _ in available:
+                villain_set = set(cards)
+                deck = [c for c in _full_deck() if c not in hero_set and c not in villain_set]
+                wins = 0.0
+                for card in deck:
+                    run_board = board_c + [card]
+                    h = self._eval.evaluate(run_board, hero_c)
+                    v = self._eval.evaluate(run_board, cards)
+                    wins += _win_share(h, v)
+                per_combo_equity.append(wins / len(deck))
+            return sum(per_combo_equity) / len(per_combo_equity)
+
+        deck_base = [c for c in _full_deck() if c not in hero_set]
+        rng = _random_mod.Random(seed) if seed is not None else self._rng
+        wins = 0.0
         for _ in range(self.iterations):
             villain_c, _ = rng.choice(available)
             villain_set = set(villain_c)
@@ -119,10 +194,7 @@ class EquityCalculator:
             run_board = board_c + deck[:need]
             h = self._eval.evaluate(run_board, hero_c)
             v = self._eval.evaluate(run_board, villain_c)
-            if h < v:
-                wins += 1.0
-            elif h == v:
-                wins += 0.5
+            wins += _win_share(h, v)
         return wins / self.iterations
 
     def range_vs_range(
@@ -197,10 +269,13 @@ class EquityCalculator:
 
         hands: list of hole-card lists, e.g. [['As','Kd'], ['Qh','Qc'], ['7s','8s']]
         Ties split equity equally among all tied players.
+
+        Exact, not Monte Carlo, with 0 or 1 cards to come
+        (docs/AUDITORIA-2026-08-26.md item I1) — same reasoning as `heads_up`.
+        `seed` is unused in both exact cases (no randomness to seed).
         """
         board = board or []
         _check_no_duplicates({f"hand {i}": h for i, h in enumerate(hands)} | {"board": board})
-        rng = _random_mod.Random(seed) if seed is not None else self._rng
         n = len(hands)
         hands_c = [_to_cards(h) for h in hands]
         board_c = _to_cards(board)
@@ -208,16 +283,29 @@ class EquityCalculator:
 
         deck = [c for c in _full_deck() if c not in known]
         need = 5 - len(board_c)
-        equity = [0.0] * n
 
-        for _ in range(self.iterations):
-            rng.shuffle(deck)
-            run_board = board_c + deck[:need]
+        def _shares(run_board: list[int]) -> list[float]:
             ranks = [self._eval.evaluate(run_board, h) for h in hands_c]
             best = min(ranks)
             winners = [i for i, r in enumerate(ranks) if r == best]
             share = 1.0 / len(winners)
-            for i in winners:
-                equity[i] += share
+            return [share if r == best else 0.0 for r in ranks]
+
+        if need == 0:
+            return _shares(board_c)
+        if need == 1:
+            equity = [0.0] * n
+            for card in deck:
+                for i, s in enumerate(_shares(board_c + [card])):
+                    equity[i] += s
+            return [e / len(deck) for e in equity]
+
+        rng = _random_mod.Random(seed) if seed is not None else self._rng
+        equity = [0.0] * n
+        for _ in range(self.iterations):
+            rng.shuffle(deck)
+            run_board = board_c + deck[:need]
+            for i, s in enumerate(_shares(run_board)):
+                equity[i] += s
 
         return [e / self.iterations for e in equity]

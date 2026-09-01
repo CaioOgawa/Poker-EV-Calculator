@@ -43,6 +43,23 @@ def test_connector_range_suited():
     assert p.combo_count("JTs-87s") == 16
 
 
+def test_fixed_high_card_kicker_range_suited():
+    # docs/AUDITORIA-2026-08-26.md item E6: A5s-A2s = A5s,A4s,A3s,A2s = 4x4=16
+    assert p.combo_count("A5s-A2s") == 16
+    assert sorted(p.parse("A5s-A2s")) == sorted(p.parse("A5s,A4s,A3s,A2s"))
+
+
+def test_fixed_high_card_kicker_range_offsuit():
+    # KQo-KTo = KQo,KJo,KTo = 3x12=36
+    assert p.combo_count("KQo-KTo") == 36
+    assert sorted(p.parse("KQo-KTo")) == sorted(p.parse("KQo,KJo,KTo"))
+
+
+def test_fixed_high_card_kicker_range_reversed_order():
+    # Same range spelled high-to-low on the left instead of low-to-high
+    assert sorted(p.parse("A2s-A5s")) == sorted(p.parse("A5s-A2s"))
+
+
 def test_empty_token():
     assert p.combo_count("") == 0
 
@@ -104,3 +121,16 @@ def test_dash_range_pair_as_connector_raises():
 def test_dash_range_missing_side_raises():
     with pytest.raises(ValueError):
         p.parse("JTs-")
+
+
+def test_plus_combined_with_dash_raises():
+    # docs/AUDITORIA-2026-08-26.md item E6: '+' used to be silently dropped
+    # here (parsed as plain "22-66"), a silent-failure class the rest of the
+    # parser deliberately avoids.
+    with pytest.raises(ValueError):
+        p.parse("22-66+")
+
+
+def test_plus_combined_with_fixed_high_dash_raises():
+    with pytest.raises(ValueError):
+        p.parse("A5s-A2s+")

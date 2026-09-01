@@ -56,6 +56,8 @@ class RangeParser:
 
         dash_pos = self._find_dash(token)
         if dash_pos != -1:
+            if plus:
+                raise ValueError(f"'+' cannot be combined with a dash range: {original!r}")
             return self._parse_dash_range(token, dash_pos, original)
 
         suited = token.endswith("s")
@@ -148,14 +150,33 @@ class RangeParser:
 
         hi_l, lo_l = sorted([_RANK_IDX[l_ranks[0]], _RANK_IDX[l_ranks[1]]], reverse=True)
         hi_r, lo_r = sorted([_RANK_IDX[r_ranks[0]], _RANK_IDX[r_ranks[1]]], reverse=True)
-        gap = hi_l - lo_l  # gap should be same for all connectors in range
+        combos: list[tuple[str, str]] = []
 
+        if hi_l == hi_r:
+            # Fixed-high-card, moving-kicker range (e.g. A5s-A2s, KQo-KTo) —
+            # the universal "high card fixed, kicker varies" notation
+            # (docs/AUDITORIA-2026-08-26.md item E6). Distinct from the
+            # connector-run mode below (JTs-87s): here the high card doesn't
+            # move, so a constant-gap check would reject it.
+            lo_start = min(lo_l, lo_r)
+            lo_end = max(lo_l, lo_r)
+            for lo_idx in range(lo_start, lo_end + 1):
+                r1, r2 = RANKS[hi_l], RANKS[lo_idx]
+                if suited:
+                    combos.extend(_suited_combos(r1, r2))
+                elif offsuit:
+                    combos.extend(_offsuit_combos(r1, r2))
+                else:
+                    combos.extend(_suited_combos(r1, r2))
+                    combos.extend(_offsuit_combos(r1, r2))
+            return combos
+
+        gap = hi_l - lo_l  # gap should be same for all connectors in range
         if gap != hi_r - lo_r:
             raise ValueError(f"Mismatched gap in connector range: {original!r}")
 
         lo_start = min(lo_l, lo_r)
         lo_end = max(lo_l, lo_r)
-        combos: list[tuple[str, str]] = []
         for lo_idx in range(lo_start, lo_end + 1):
             hi_idx = lo_idx + gap
             if hi_idx >= len(RANKS):
