@@ -63,15 +63,75 @@ def test_dominant_range_wins_most_of_the_pot():
 
 
 # ---------------------------------------------------------------------------
+# Info-set key collision (docs/AUDITORIA-2026-08-26.md item E3)
+# ---------------------------------------------------------------------------
+
+
+def test_river_info_sets_disambiguate_arrival_history():
+    # RIVER_BOARD is 4 cards, so `solve()` still models two betting streets:
+    # action on the given 4-card board (empirically the "turn" street), then
+    # one more card gets dealt and there's a second betting round on the
+    # resulting 5-card board (the "river" street) — see the module docstring.
+    # The same 5-card board is reachable via 5 different turn-street lines
+    # (check-check, bet_0.5-call, bet_1.0-call, check-bet_0.5-call,
+    # check-bet_1.0-call), each carrying a different pot. Pre-fix, all 5
+    # collapsed onto one street-local key at the river root/decision points
+    # ("", "x", "b0", "b1", "xb0", "xb1", with no way to tell which line
+    # produced them — no "|" ever appears in a key). Post-fix each line gets
+    # its own key, disambiguated by the full history's pre-river segment.
+    solver = MultiStreetEV(iterations=800, seed=0, max_combo_pairs=20)
+    solver.solve(oop_range="AKs", ip_range="QJs", board=RIVER_BOARD, pot=100, bet_sizes=[0.5, 1.0])
+
+    river_keys = [k for k in solver._regret_sum if len(k[2]) == 5]
+    assert river_keys, "training should have reached the river street at least once"
+    # Exactly one street boundary crossed to reach any river-street key.
+    assert all(k[3].count("|") == 1 for k in river_keys)
+    # More than one distinct turn-street arrival line actually got explored,
+    # and every one of them is a real, reachable turn-street terminal (this
+    # pins the label alphabet so a future action-label change can't silently
+    # break every documented `strategy(..., history=...)` call).
+    arrival_lines = {k[3].split("|", 1)[0] for k in river_keys}
+    assert len(arrival_lines) > 1
+    assert arrival_lines <= {"xx", "b0c", "b1c", "xb0c", "xb1c"}
+
+
+@pytest.mark.slow
+def test_flop_info_sets_disambiguate_arrival_history():
+    # The literal case the audit named: a flop-start solve (3-card board)
+    # has *three* betting streets (flop, turn, river). Kept to the minimum
+    # viable size for a "flop mínimo" repro — a single bet size and ranges
+    # blocked down to 3 legal combo pairs by the board — because `_evaluate`
+    # unconditionally enumerates ~2,000 turn+river run-outs per combo pair
+    # across three modes regardless of `iterations`; the equivalent
+    # unconstrained solve is a multi-minute run (see module docstring).
+    solver = MultiStreetEV(iterations=400, seed=0, max_combo_pairs=10)
+    solver.solve(oop_range="KK", ip_range="AKs", board=["As", "Ah", "Ad"], pot=100, bet_sizes=[0.5])
+
+    turn_keys = [k for k in solver._regret_sum if len(k[2]) == 4]
+    assert turn_keys, "training should have reached the turn street at least once"
+    assert all(k[3].count("|") == 1 for k in turn_keys)
+    arrival_lines = {k[3].split("|", 1)[0] for k in turn_keys}
+    assert len(arrival_lines) > 1
+
+
+# ---------------------------------------------------------------------------
 # CFR convergence — exploitability must shrink with more iterations
 # ---------------------------------------------------------------------------
 
 
 def test_exploitability_shrinks_with_more_iterations():
+    # docs/AUDITORIA-2026-08-26.md item E3: fixing the info-set key collision
+    # (public history now threaded through instead of reset per street)
+    # legitimately grows the number of distinct info sets even for this
+    # 4-card "river-only" board — it turns out to still have two betting
+    # streets (turn action + river action), so it collided too. A bigger
+    # state space needs more samples to hit the same convergence ratio; 3000
+    # iterations was enough pre-fix but isn't anymore, so `high` is raised to
+    # 6000. That's the fix working as intended, not a regression.
     low = MultiStreetEV(iterations=50, seed=11, max_combo_pairs=20).solve(
         oop_range="AKs", ip_range="QJs", board=RIVER_BOARD, pot=100, bet_sizes=[0.5, 1.0]
     )
-    high = MultiStreetEV(iterations=3000, seed=11, max_combo_pairs=20).solve(
+    high = MultiStreetEV(iterations=6000, seed=11, max_combo_pairs=20).solve(
         oop_range="AKs", ip_range="QJs", board=RIVER_BOARD, pot=100, bet_sizes=[0.5, 1.0]
     )
     assert high.exploitability < low.exploitability

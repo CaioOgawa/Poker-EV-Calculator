@@ -3,9 +3,12 @@ heads-up betting subgame with weighted ranges.
 
 Scope, deliberately bounded ("CFR-lite", per the project roadmap):
   - Heads-up only, OOP acts first on every street.
-  - `board` must have 3 cards (flop — solves turn AND river) or 4 cards
-    (turn — solves river only). There's no street left to solve from a
-    5-card board.
+  - `board` must have 3 cards (flop — models flop, turn, AND river betting;
+    2 cards get dealt) or 4 cards (turn — models turn AND river betting; 1
+    card gets dealt). There's no street left to solve from a 5-card board.
+    Both cases involve at least two betting streets, not one — see
+    docs/AUDITORIA-2026-08-26.md item E3 (the audit's own text undersold
+    this, describing the 4-card case as single-street).
   - Each betting round allows at most one bet and a fold/call response —
     no raises. This bounds the tree; it's the "lite" in CFR-lite.
   - Card removal is always exact: every (OOP combo, IP combo, run-out)
@@ -38,6 +41,15 @@ evaluations the final pass has to do grows fast — a few dozen combos per
 side times ~2,000 turn/river run-outs is still fine, full unpruned ranges
 are not. `max_combo_pairs` guards against silently running something that
 would take far too long; narrow the ranges or raise it deliberately.
+
+Info-set keys are `(player, combo, board, history)` where `history` is the
+full public action history since the hand started (docs/AUDITORIA-2026-08-26.md
+item E3), with "|" marking street boundaries — not just the current street's
+local action prefix. Two different prior-street lines (e.g. check-check vs
+bet-call) that deal into the same next-street board are genuinely different
+game states (different pots) and need different info sets; keying on
+street-local history alone collapsed them into one, forcing a shared
+regret-matched strategy across states with different payoffs.
 
 Performance note: a `board` with 4 cards (river only — one street, ~44
 run-outs per combo pair) solves in well under a second for a handful of
@@ -91,7 +103,11 @@ def _combo_str(combo: Combo) -> str:
 
 
 def _action_labels(history: str, bet_sizes: tuple[float, ...]) -> list[str]:
-    if history in ("", "x"):
+    # `history` is the full public history since the hand started (see
+    # docs/AUDITORIA-2026-08-26.md item E3) — streets are "|"-separated, so
+    # only the suffix after the last "|" describes the current street.
+    street = history.rsplit("|", 1)[-1]
+    if street in ("", "x"):
         return ["check"] + [f"bet_{b}" for b in bet_sizes]
     return ["fold", "call"]
 
@@ -222,7 +238,21 @@ class MultiStreetEV:
     def strategy(
         self, player: str, combo: list[str], board: list[str], history: str = ""
     ) -> dict[str, float]:
-        """Trained average strategy at one information set, after `solve()`."""
+        """Trained average strategy at one information set, after `solve()`.
+
+        `history` is the full public action history since the hand started
+        (docs/AUDITORIA-2026-08-26.md item E3), not just the current street's
+        prefix — streets are "|"-separated. For a query on the first street
+        (`board` == the board passed to `solve()`), a street-local prefix like
+        `"xb0"` is already the full history and needs no separator. For a
+        query on a later street (e.g. the river after a flop-start solve),
+        include every prior street, e.g. `"xx|"` for check-check (OOP's "x"
+        from the flop root, then IP's own "x") into a street where OOP now
+        faces the opening decision, since `("oop", combo, board, "")` and
+        `("oop", combo, board, "xx|")` are genuinely different info sets —
+        different pots, reached via different action lines to the same
+        board — not the same query with two spellings.
+        """
         if self._bet_sizes is None:
             raise RuntimeError("call solve() before strategy()")
         if player not in ("oop", "ip"):
@@ -317,9 +347,16 @@ class MultiStreetEV:
         reach_oop: float,
         reach_ip: float,
         mode: str,
+        history: str = "",
     ) -> float:
+        # `history` is the full public history since the hand started, not
+        # just this street's local action prefix (docs/AUDITORIA-2026-08-26.md
+        # item E3) — otherwise two different prior-street lines (e.g.
+        # check-check vs bet-call) that deal the same next-street board would
+        # collide on `("oop", combo, board, "")` despite carrying different
+        # pots, forcing them to share one regret-matched strategy.
         n_actions = 1 + len(bet_sizes)
-        key = ("oop", _canon(oop_combo), board, "")
+        key = ("oop", _canon(oop_combo), board, history)
 
         if mode == "train":
             strategy: list[float] | None = self._get_strategy(key, n_actions, "train")
@@ -344,6 +381,7 @@ class MultiStreetEV:
             r_oop(0),
             reach_ip,
             mode,
+            history + "x",
         )
         for i in range(len(bet_sizes)):
             action_values[i + 1] = self._facing_oop_bet(
@@ -359,6 +397,7 @@ class MultiStreetEV:
                 r_oop(i + 1),
                 reach_ip,
                 mode,
+                history + f"b{i}",
             )
 
         if mode == "br_oop":
@@ -390,9 +429,10 @@ class MultiStreetEV:
         reach_oop: float,
         reach_ip: float,
         mode: str,
+        history: str,
     ) -> float:
         n_actions = 1 + len(bet_sizes)
-        key = ("ip", _canon(ip_combo), board, "x")
+        key = ("ip", _canon(ip_combo), board, history)
 
         if mode == "train":
             strategy: list[float] | None = self._get_strategy(key, n_actions, "train")
@@ -415,6 +455,7 @@ class MultiStreetEV:
             reach_oop,
             r_ip(0),
             mode,
+            history + "x",
         )
         for i in range(len(bet_sizes)):
             action_values[i + 1] = self._facing_ip_bet_after_check(
@@ -430,6 +471,7 @@ class MultiStreetEV:
                 reach_oop,
                 r_ip(i + 1),
                 mode,
+                history + f"b{i}",
             )
 
         if mode == "br_ip":
@@ -462,8 +504,9 @@ class MultiStreetEV:
         reach_oop: float,
         reach_ip: float,
         mode: str,
+        history: str,
     ) -> float:
-        key = ("ip", _canon(ip_combo), board, f"b{i}")
+        key = ("ip", _canon(ip_combo), board, history)
         bet = bet_sizes[i] * pot
 
         if mode == "train":
@@ -487,6 +530,7 @@ class MultiStreetEV:
             reach_oop,
             next_reach_ip,
             mode,
+            history + "c",
         )
 
         action_values = [fold_value, call_value]
@@ -520,8 +564,9 @@ class MultiStreetEV:
         reach_oop: float,
         reach_ip: float,
         mode: str,
+        history: str,
     ) -> float:
-        key = ("oop", _canon(oop_combo), board, f"xb{i}")
+        key = ("oop", _canon(oop_combo), board, history)
         bet = bet_sizes[i] * pot
 
         if mode == "train":
@@ -545,6 +590,7 @@ class MultiStreetEV:
             next_reach_oop,
             reach_ip,
             mode,
+            history + "c",
         )
 
         action_values = [fold_value, call_value]
@@ -577,9 +623,13 @@ class MultiStreetEV:
         reach_oop: float,
         reach_ip: float,
         mode: str,
+        history: str,
     ) -> float:
         if deal_queue:
             new_board = board + (deal_queue[0],)
+            # "|" marks the street boundary so `_action_labels` (and anyone
+            # reading a key) can find the current street's local prefix —
+            # see item E3.
             return self._root(
                 oop_combo,
                 ip_combo,
@@ -592,6 +642,7 @@ class MultiStreetEV:
                 reach_oop,
                 reach_ip,
                 mode,
+                history + "|",
             )
         return self._showdown(oop_combo, ip_combo, board, pot, oop_c, ip_c)
 
