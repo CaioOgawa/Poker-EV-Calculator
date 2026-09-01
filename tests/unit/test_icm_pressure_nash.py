@@ -1,9 +1,11 @@
 """Tests for ICMPressure (bubble factor) and ICMNash (HU push/fold)."""
 
-import pytest
 from engine.icm import ICMPressure, ICMNash, HAND_RANK
 
-pytestmark = pytest.mark.slow
+# No `slow` marker: ICMNash now looks equity up in a precomputed table
+# (docs/AUDITORIA-2026-08-26.md item I3) instead of running Monte Carlo per
+# query, so solve_hu is milliseconds, not seconds — this whole module is
+# fast enough for the default suite.
 
 # ------------------------------------------------------------------
 # ICMPressure — bubble factor
@@ -75,7 +77,7 @@ def test_pressure_ranking_sorted_descending():
 # ICMNash — HU push/fold
 # ------------------------------------------------------------------
 
-nash = ICMNash(equity_iterations=1500)
+nash = ICMNash()
 
 
 def test_hand_rank_has_169_hands():

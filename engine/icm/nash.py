@@ -10,17 +10,25 @@ Algorithm:
 "Threshold" = the weakest hand worth pushing/calling, expressed as an index
 into HAND_RANK (higher index = wider range).
 
-Equity approximations use the EquityCalculator (Monte Carlo), which is slow
-for full 169-hand sweeps. To keep runtime practical, equity is computed
-on-demand and cached per (hand, range_str) pair within a session.
+Hand-vs-hand equities come from a precomputed 169x169 table (see
+`build_equity_table.py` and docs/AUDITORIA-2026-08-26.md item I3), not a
+live Monte Carlo call per query: with equity thresholds decided on the
+margin (`ev_push >= ev_hero_fold`), the ~1% sampling error of an on-demand
+2,000-iteration estimate was itself a source of threshold instability, on
+top of the genuine best-response cycling documented below. The table is
+generated once offline at much higher precision and loaded here as a
+constant, making `_equity` an O(1) lookup instead of an O(iterations) sim.
 
 Stack conventions: all stacks in chips. Blinds in chips.
 """
 
 from __future__ import annotations
 from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
 from engine.icm.model import ICMModel
-from core.equity.calculator import EquityCalculator
 
 # 169 canonical preflop hands ordered from strongest to weakest by actual
 # all-in equity vs. a uniformly random opponent hand (card-removal aware).
@@ -213,6 +221,36 @@ HAND_RANK: list[str] = [
 assert len(HAND_RANK) == len(set(HAND_RANK)), "Duplicate hands in HAND_RANK"
 assert len(HAND_RANK) == 169, "HAND_RANK must contain all 169 canonical hands"
 
+_HAND_INDEX: dict[str, int] = {hand: idx for idx, hand in enumerate(HAND_RANK)}
+
+_DATA_DIR = Path(__file__).parent / "data"
+_EQUITY_TABLE_PATH = _DATA_DIR / "hand_vs_hand_equity.npy"
+
+_equity_table_cache: np.ndarray | None = None
+
+
+def _load_equity_table() -> np.ndarray:
+    global _equity_table_cache
+    if _equity_table_cache is not None:
+        return _equity_table_cache
+    if not _EQUITY_TABLE_PATH.exists():
+        raise FileNotFoundError(
+            f"Precomputed hand-vs-hand equity table not found at {_EQUITY_TABLE_PATH}. "
+            "Generate it once with:\n"
+            "    python -m engine.icm.build_equity_table\n"
+            "(~40 min on 8 cores at the default 20,000 iterations/pair; see that module's "
+            "docstring for the tradeoffs)."
+        )
+    table = np.load(_EQUITY_TABLE_PATH)
+    expected_shape = (len(HAND_RANK), len(HAND_RANK))
+    if table.shape != expected_shape:
+        raise ValueError(
+            f"{_EQUITY_TABLE_PATH} has shape {table.shape}, expected {expected_shape} — "
+            "regenerate it with engine.icm.build_equity_table."
+        )
+    _equity_table_cache = table
+    return table
+
 
 @dataclass
 class NashResult:
@@ -229,34 +267,21 @@ class ICMNash:
     all-in-or-fold scenario (e.g. HU at a final table or short-stack HU).
     """
 
-    def __init__(
-        self,
-        model: ICMModel | None = None,
-        equity_calc: EquityCalculator | None = None,
-        equity_iterations: int = 2_000,
-    ):
+    def __init__(self, model: ICMModel | None = None):
         self._model = model or ICMModel()
-        self._calc = equity_calc or EquityCalculator(iterations=equity_iterations, seed=0)
-        self._equity_cache: dict[tuple[str, str], float] = {}
+        self._table = _load_equity_table()
 
     def _equity(self, hand: str, vs_range: str) -> float:
-        key = (hand, vs_range)
-        if key not in self._equity_cache:
-            # Convert canonical hand to specific cards for calculation
-            cards = self._hand_to_cards(hand)
-            self._equity_cache[key] = self._calc.vs_range(cards, vs_range)
-        return self._equity_cache[key]
+        """Hero `hand`'s equity vs. a comma-separated list of canonical hands.
 
-    @staticmethod
-    def _hand_to_cards(hand: str) -> list[str]:
-        """Convert canonical hand string to two specific cards (worst blockers)."""
-        if len(hand) == 2:  # pocket pair e.g. "AA"
-            return [hand[0] + "s", hand[0] + "h"]
-        suited = hand.endswith("s")
-        r1, r2 = hand[0], hand[1]
-        if suited:
-            return [r1 + "s", r2 + "s"]
-        return [r1 + "s", r2 + "h"]
+        Looks up the precomputed table and averages uniformly over the
+        opponent hands named in `vs_range` (one weight per canonical hand,
+        not per combo — matching `_range_str`'s uncombo-weighted range
+        construction; see docs/AUDITORIA-2026-08-26.md item E2, still open).
+        """
+        row = self._table[_HAND_INDEX[hand]]
+        cols = [_HAND_INDEX[h] for h in vs_range.split(",")]
+        return float(row[cols].mean())
 
     def _range_str(self, threshold: int) -> str:
         """Return comma-separated range string for hands up to threshold index."""
