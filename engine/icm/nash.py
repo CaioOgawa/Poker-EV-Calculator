@@ -19,6 +19,12 @@ top of the genuine best-response cycling documented below. The table is
 generated once offline at much higher precision and loaded here as a
 constant, making `_equity` an O(1) lookup instead of an O(iterations) sim.
 
+All-in confrontations are contested for the *effective* stack — min(hero,
+villain), not the full stack on both sides — and range EVs (`_equity`,
+`_call_freq`) are combo-weighted and card-removal-aware against the fixed
+hand's own two cards, not a flat 1/169 per canonical hand
+(docs/AUDITORIA-2026-08-26.md items E1 and E2).
+
 Stack conventions: all stacks in chips. Blinds in chips.
 """
 
@@ -28,7 +34,10 @@ from pathlib import Path
 
 import numpy as np
 
+from core.ranges.range_parser import RANKS, SUITS, RangeParser
 from engine.icm.model import ICMModel
+
+_PARSER = RangeParser()
 
 # 169 canonical preflop hands ordered from strongest to weakest by actual
 # all-in equity vs. a uniformly random opponent hand (card-removal aware).
@@ -223,6 +232,28 @@ assert len(HAND_RANK) == 169, "HAND_RANK must contain all 169 canonical hands"
 
 _HAND_INDEX: dict[str, int] = {hand: idx for idx, hand in enumerate(HAND_RANK)}
 
+# Combo-count and card-removal bookkeeping for E2 (docs/AUDITORIA-2026-08-26.md):
+# treating every canonical hand as equally likely (1/169) ignores that AA is 6
+# combos, AKs is 4, AKo is 12, and ignores blockers from hero's own hole cards.
+# _COMBO_WEIGHT[h] = combo count of canonical hand h (6, 4, or 12).
+# _BLOCK_MATRIX[h, c] = how many of hand h's combos contain card c.
+# Both are computed once at import time from RangeParser's own combo generator
+# (the same one EquityCalculator uses), not re-derived ad hoc.
+_ALL_CARDS: list[str] = [r + s for r in RANKS for s in SUITS]
+_CARD_INDEX: dict[str, int] = {c: i for i, c in enumerate(_ALL_CARDS)}
+# C(50, 2): villain's combo universe given hero's 2 known cards
+_TOTAL_COMBOS_EXCLUDING_KNOWN = 1225
+
+_COMBO_WEIGHT = np.zeros(len(HAND_RANK), dtype=np.float64)
+_BLOCK_MATRIX = np.zeros((len(HAND_RANK), len(_ALL_CARDS)), dtype=np.float64)
+for _h_idx, _hand in enumerate(HAND_RANK):
+    _combos = _PARSER.parse(_hand)
+    _COMBO_WEIGHT[_h_idx] = len(_combos)
+    for _c1, _c2 in _combos:
+        _BLOCK_MATRIX[_h_idx, _CARD_INDEX[_c1]] += 1
+        _BLOCK_MATRIX[_h_idx, _CARD_INDEX[_c2]] += 1
+del _h_idx, _hand, _combos, _c1, _c2
+
 _DATA_DIR = Path(__file__).parent / "data"
 _EQUITY_TABLE_PATH = _DATA_DIR / "hand_vs_hand_equity.npy"
 
@@ -271,17 +302,86 @@ class ICMNash:
         self._model = model or ICMModel()
         self._table = _load_equity_table()
 
+    def _range_weights(self, fixed_hand: str, target_hands: list[str]) -> np.ndarray:
+        """Combo-weighted, card-removal-aware weight for each hand in `target_hands`,
+        given that `fixed_hand` blocks some of their combos (docs/AUDITORIA-2026-08-26.md
+        item E2).
+
+        `fixed_hand` is canonical (e.g. "AKs" covers 4 specific-card combos, each
+        blocking a different subset of the deck), so the weight is averaged over
+        its own combos. For one specific fixed combo (a, b), the number of a
+        target hand's combos left unblocked is, by inclusion-exclusion:
+            combo_count − (combos containing a) − (combos containing b)
+                        + (combos containing both a and b)
+        The last term is 1 only for the fixed hand's own canonical bucket (two
+        specific cards form exactly one combo, and it belongs to exactly one
+        canonical hand) and 0 everywhere else.
+
+        Weights sum to the expected number of unblocked combos across
+        `target_hands`; divide by 1225 (= C(50,2), the villain's combo universe
+        given hero's 2 known cards) to turn the total into a probability.
+        """
+        fixed_idx = _HAND_INDEX[fixed_hand]
+        fixed_combos = _PARSER.parse(fixed_hand)
+        total = np.zeros(len(HAND_RANK))
+        for a, b in fixed_combos:
+            blocked = _BLOCK_MATRIX[:, _CARD_INDEX[a]] + _BLOCK_MATRIX[:, _CARD_INDEX[b]]
+            unblocked = _COMBO_WEIGHT - blocked
+            unblocked[fixed_idx] += 1.0
+            total += unblocked
+        total /= len(fixed_combos)
+        cols = [_HAND_INDEX[h] for h in target_hands]
+        return total[cols]
+
     def _equity(self, hand: str, vs_range: str) -> float:
         """Hero `hand`'s equity vs. a comma-separated list of canonical hands.
 
-        Looks up the precomputed table and averages uniformly over the
-        opponent hands named in `vs_range` (one weight per canonical hand,
-        not per combo — matching `_range_str`'s uncombo-weighted range
-        construction; see docs/AUDITORIA-2026-08-26.md item E2, still open).
+        Looks up the precomputed table and averages over the opponent hands
+        named in `vs_range`, weighted by each hand's available combo count
+        given hero's own two cards as blockers (see `_range_weights`) —
+        not one uniform weight per canonical hand regardless of combo count.
+
+        Residual approximation: the table itself (`build_equity_table.py`) is
+        canonical-hand-level, i.e. `table[i][j]` is already marginalized over
+        both sides' combos with mutual card removal between i and j alone. It
+        doesn't know about hero's blockers against a *third* hand in `vs_range`,
+        so this is a weighted average of pairwise-exact equities, not a fully
+        joint combo-vs-combo equity (average-of-products, not product-of-
+        averages). Closing that gap needs a full combo-level equity table —
+        out of scope here.
         """
+        hands = vs_range.split(",")
         row = self._table[_HAND_INDEX[hand]]
-        cols = [_HAND_INDEX[h] for h in vs_range.split(",")]
-        return float(row[cols].mean())
+        cols = [_HAND_INDEX[h] for h in hands]
+        weights = self._range_weights(hand, hands)
+        return float(np.average(row[cols], weights=weights))
+
+    def _call_freq(self, hero_hand: str, call_range_hands: list[str]) -> float:
+        """P(villain holds a hand in `call_range_hands`), combo-weighted and
+        card-removal-aware against hero's own two cards (docs/AUDITORIA-2026-08-26.md
+        item E2 — this replaces treating every canonical hand as equally likely).
+        """
+        if not call_range_hands:
+            return 0.0
+        weights = self._range_weights(hero_hand, call_range_hands)
+        return float(weights.sum() / _TOTAL_COMBOS_EXCLUDING_KNOWN)
+
+    def _all_in_equity(self, s_hero: int, s_villain: int, payouts: list[float]) -> list[float]:
+        """ICM equity split [hero, villain] for stacks (s_hero, s_villain) right
+        after an all-in confrontation (docs/AUDITORIA-2026-08-26.md item E1).
+
+        `ICMModel.equity` assigns 0.0 — not the consolation payout — to a
+        zero-chip entry (verified: `equity([10000, 0], payouts) == [p1, 0.0]`,
+        not `[p1, p2]`), so the two-player elimination case is handled
+        explicitly here instead of routed through the model.
+        """
+        p1 = payouts[0]
+        p2 = payouts[1] if len(payouts) >= 2 else 0.0
+        if s_villain == 0:
+            return [p1, p2]
+        if s_hero == 0:
+            return [p2, p1]
+        return self._model.equity([s_hero, s_villain], payouts)
 
     def _range_str(self, threshold: int) -> str:
         """Return comma-separated range string for hands up to threshold index."""
@@ -317,9 +417,12 @@ class ICMNash:
         Stack conventions:
           - EV(hero fold)        → [hero - sb, villain + sb]
           - EV(push, v folds)    → [hero + bb, villain - bb]
-          - EV(push, v calls, hero wins)  → [total, 0]
-          - EV(push, v calls, hero loses) → [0, total]
+          - EV(push, v calls, hero wins)  → ICM([hero+eff, villain-eff]), eff=min(hero,villain)
+          - EV(push, v calls, hero loses) → ICM([hero-eff, villain+eff])
           - EV(villain fold push) → [hero + bb, villain - bb]  (same as hero fold wins bb)
+          An all-in is contested for the *effective* stack (the smaller of the
+          two), not the full stack on both sides (docs/AUDITORIA-2026-08-26.md
+          item E1) — the bigger stack survives a loss with its excess chips.
 
         Returns NashResult with push_range (hero) and call_range (villain).
         """
@@ -335,14 +438,13 @@ class ICMNash:
         # Villain folds to hero's push (hero wins the big blind)
         eq_villain_fold = self._model.equity([hero_stack + bb, max(0, villain_stack - bb)], payouts)
 
-        # HU all-in outcomes: winner takes 1st-place payout, loser gets 2nd-place payout.
-        # ICMModel.equity([total, 0]) returns [p1, 0] — it excludes the busted player and
-        # doesn't assign their consolation prize. For a 2-player game the loser always
-        # secures payouts[1] (or 0 if there's only one payout).
-        p1 = payouts[0]
-        p2 = payouts[1] if len(payouts) >= 2 else 0.0
-        eq_hero_wins = [p1, p2]  # hero 1st, villain 2nd
-        eq_hero_loses = [p2, p1]  # villain 1st, hero 2nd
+        # HU all-in outcomes, contested for the effective stack (E1): the
+        # winner gains min(hero, villain) chips from the loser, not the
+        # loser's entire stack — with unequal stacks the loser only busts if
+        # they had the shorter stack.
+        eff = min(hero_stack, villain_stack)
+        eq_hero_wins = self._all_in_equity(hero_stack + eff, villain_stack - eff, payouts)
+        eq_hero_loses = self._all_in_equity(hero_stack - eff, villain_stack + eff, payouts)
 
         # --- Iterate push/call ranges ---
         # Start: villain calls top 30% by default
@@ -352,15 +454,21 @@ class ICMNash:
         for _ in range(max_iter):
             # Step 1: given villain's call range, find all hands where push > fold
             call_range_str = self._range_str(call_threshold)
-            call_freq = (call_threshold + 1) / len(HAND_RANK) if call_threshold >= 0 else 0.0
+            call_range_hands = HAND_RANK[: call_threshold + 1] if call_threshold >= 0 else []
 
             new_push_threshold = -1
             for idx in range(len(HAND_RANK)):
                 hand = HAND_RANK[idx]
                 if call_range_str:
                     eq_h = self._equity(hand, call_range_str)
+                    # Combo-weighted, card-removal-aware fold equity (E2) — how
+                    # likely villain's random hand actually falls in their call
+                    # range given hero's own two cards as blockers, not a flat
+                    # (call_threshold + 1) / 169.
+                    call_freq = self._call_freq(hand, call_range_hands)
                 else:
                     eq_h = 1.0  # villain never calls
+                    call_freq = 0.0
 
                 ev_push = (1.0 - call_freq) * eq_villain_fold[0] + call_freq * (
                     eq_h * eq_hero_wins[0] + (1.0 - eq_h) * eq_hero_loses[0]
@@ -393,8 +501,8 @@ class ICMNash:
                 hand = HAND_RANK[idx]
                 eq_v = self._equity(hand, push_range_str)
 
-                # Villain wins → hero loses (stacks [0, total])
-                # Villain loses → hero wins (stacks [total, 0])
+                # Villain wins → hero loses the effective stack
+                # Villain loses → hero wins the effective stack
                 ev_call = (
                     eq_v * eq_hero_loses[1]  # villain wins → eq_hero_loses[1]
                     + (1.0 - eq_v) * eq_hero_wins[1]  # villain loses → eq_hero_wins[1]
@@ -409,10 +517,14 @@ class ICMNash:
 
             # Best-response iteration on a nonlinear ICM landscape doesn't
             # always settle at a fixed point — it can orbit a cycle of two or
-            # more states indefinitely (verified empirically: e.g. stacks
-            # [6000, 4000] cycles through 3 distinct (push, call) pairs
-            # ranging from a near-empty push range to "shove everything").
-            # Stopping at whatever state max_iter happens to land on would
+            # more states indefinitely. Fixing E1 (effective-stack showdown)
+            # and E2 (combo-weighted, blocker-aware fold equity/range
+            # averaging) narrowed this, but didn't eliminate it: stacks
+            # [6000, 4000] used to cycle through 3 states swinging from
+            # near-empty to "shove everything" (push_threshold 5 <-> 168);
+            # post-fix it settles into a tighter 2-state cycle instead
+            # (verified empirically: push_threshold 32 <-> 135). Stopping at
+            # whatever state max_iter happens to land on would
             # report an arbitrary corner of that cycle. Instead, once a state
             # repeats one we've already seen, treat everything from its first
             # occurrence onward as one full cycle and report the *average*

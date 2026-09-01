@@ -54,12 +54,27 @@ def test_table_close_hands_are_near_even(table):
     assert 0.40 < table[aks, ako] < 0.60
 
 
-def test_equity_matches_manual_uniform_mean_over_range(table):
+def test_equity_matches_manual_combo_weighted_mean_over_range(table):
+    # docs/AUDITORIA-2026-08-26.md item E2: _equity averages over the range
+    # weighted by each hand's available combo count given hero's own two
+    # cards as blockers, not a flat 1/N per canonical hand — so the expected
+    # value here is a combo-weighted (not uniform) mean.
     nash = ICMNash()
     row = table[_HAND_INDEX["QQ"]]
-    vs_range = "AA,KK,AKs"
-    expected = row[[_HAND_INDEX["AA"], _HAND_INDEX["KK"], _HAND_INDEX["AKs"]]].mean()
-    assert nash._equity("QQ", vs_range) == pytest.approx(expected)
+    hands = ["AA", "KK", "AKs"]
+    cols = [_HAND_INDEX[h] for h in hands]
+    weights = nash._range_weights("QQ", hands)
+    expected = np.average(row[cols], weights=weights)
+    assert nash._equity("QQ", ",".join(hands)) == pytest.approx(expected)
+
+
+def test_equity_range_weights_differ_from_uniform_for_mixed_combo_counts():
+    # AA (6 combos) should be weighted differently from AKs (4 combos) once
+    # QQ's own two cards are removed — sanity check that E2 actually changed
+    # behavior rather than the weights collapsing back to uniform.
+    nash = ICMNash()
+    weights = nash._range_weights("QQ", ["AA", "AKs"])
+    assert weights[0] != pytest.approx(weights[1])
 
 
 def test_two_instances_share_the_same_cached_table():

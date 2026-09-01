@@ -1,5 +1,7 @@
 """Tests for ICMPressure (bubble factor) and ICMNash (HU push/fold)."""
 
+import pytest
+
 from engine.icm import ICMPressure, ICMNash, HAND_RANK
 
 # No `slow` marker: ICMNash now looks equity up in a precomputed table
@@ -92,6 +94,25 @@ def test_hand_rank_starts_with_aa():
     assert HAND_RANK[0] == "AA"
 
 
+def test_all_in_equity_uses_effective_stack_not_full_stack():
+    # docs/AUDITORIA-2026-08-26.md item E1, second worked example: hero wins
+    # an all-in for the effective stack (4000) at [4000, 6000], ending at
+    # [8000, 2000] — villain survives with 2000, doesn't bust. The old,
+    # unfixed code hardcoded this branch to the winner-takes-all payout
+    # ([0.65, 0.35]); the correct ICM split for [8000, 2000] is [0.59, 0.41].
+    result = nash._all_in_equity(8000, 2000, [0.65, 0.35])
+    assert result == pytest.approx([0.59, 0.41], abs=1e-4)
+
+
+def test_all_in_equity_zero_stack_hits_elimination_guard():
+    # ICMModel.equity assigns 0.0 (not the consolation payout) to a
+    # zero-chip entry — this is the branch that keeps the guard from
+    # silently dropping the loser's second-place equity in the equal-stack
+    # and short-stack-busts cases.
+    assert nash._all_in_equity(10000, 0, [0.65, 0.35]) == [0.65, 0.35]
+    assert nash._all_in_equity(0, 10000, [0.65, 0.35]) == [0.35, 0.65]
+
+
 def test_solve_hu_returns_nashresult():
     from engine.icm.nash import NashResult
 
@@ -141,11 +162,28 @@ def test_solve_hu_push_threshold_matches_range_length():
         assert result.push_threshold == -1
 
 
+def test_range_weights_sum_to_full_combo_universe():
+    # Card-removal self-check (E2): for any fixed hand, its available combos
+    # summed across all 169 opponent canonical hands must equal exactly
+    # C(50, 2) = 1225 — the deck minus the fixed hand's own two known cards.
+    # A wrong entry in the block matrix would silently under/over-count
+    # blocked combos without this catching it.
+    for hand in ["AA", "AKs", "AKo", "72o", "T9s"]:
+        assert nash._range_weights(hand, HAND_RANK).sum() == pytest.approx(1225)
+
+
 def test_solve_hu_deep_stacks_converges_to_stable_range():
     # Regression: best-response iteration at [6000, 4000] (60bb/40bb) doesn't
-    # settle at a fixed point — it orbits a 3-state cycle ranging from a
-    # near-empty push range to "shove every hand", depending purely on where
-    # max_iter happened to cut off. The cycle-averaging fix should report a
-    # stable, moderate range regardless of max_iter.
+    # settle at a fixed point. Before E1 (effective-stack showdown) + E2
+    # (combo-weighted, blocker-aware fold equity) it orbited a 3-state cycle
+    # ranging from a near-empty push range to "shove every hand" (threshold 5
+    # <-> 168), averaging to push_threshold=64/call_threshold=53 (push len
+    # 65, call len 54). After the fix it settles into a tighter 2-state cycle
+    # (threshold 32 <-> 135), averaging to push_threshold=84/call_threshold=42
+    # (push len 85, call len 43). The bounds below bracket the post-fix
+    # values on both sides and, unlike the old `20 < push < 150`, exclude the
+    # pre-fix result on both push and call — so this actually regresses
+    # against E1/E2 breaking, not just against a gross algorithm failure.
     result = nash.solve_hu([6000, 4000], [0.65, 0.35], sb=50, bb=100)
-    assert 20 < len(result.push_range) < 150
+    assert 75 < len(result.push_range) < 95
+    assert 35 < len(result.call_range) < 50
