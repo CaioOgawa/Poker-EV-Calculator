@@ -68,3 +68,6 @@ graphify-out/
 
 # Local project notes — not meant for the GitHub repo
 /docs/
+
+# Local tool config — not meant for the GitHub repo
+/.claude/
