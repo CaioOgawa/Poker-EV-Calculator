@@ -71,7 +71,12 @@ from core.ranges.range_parser import RangeParser
 
 _PARSER = RangeParser()
 _EVAL = Evaluator()
-_FULL_DECK: tuple[int, ...] = tuple(Deck().cards)
+# `Deck().cards` shuffles with an OS-entropy seed at import time, which made
+# every `MultiStreetEV(seed=...)` run non-reproducible across processes
+# despite the explicit seed — the base card order it samples from already
+# differed. `GetFullDeck()` returns the 52 cards in a fixed canonical order;
+# all the actual randomness comes from `self._rng` (seeded) downstream.
+_FULL_DECK: tuple[int, ...] = tuple(Deck.GetFullDeck())
 
 Combo = tuple[int, int]
 

@@ -1,8 +1,23 @@
 import pytest
+from treys import Deck
 
-from engine.ev.multistreet import MultiStreetEV, _regret_match
+from engine.ev.multistreet import _FULL_DECK, MultiStreetEV, _regret_match
 
 RIVER_BOARD = ["2c", "7d", "Th", "Ks"]
+
+
+# ---------------------------------------------------------------------------
+# _FULL_DECK — must be a fixed order, not OS-entropy-shuffled at import time
+# (docs/AUDITORIA-2026-08-26.md: `Deck().cards` reseeds from OS entropy on
+# every call, so building this module-level constant from it made every
+# `MultiStreetEV(seed=...)` solve non-reproducible across process restarts
+# despite the explicit seed — same seed, different card order to sample
+# from. `Deck.GetFullDeck()` is the unshuffled, deterministic 52-card list.)
+# ---------------------------------------------------------------------------
+
+
+def test_full_deck_constant_is_deterministic():
+    assert _FULL_DECK == tuple(Deck.GetFullDeck())
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +75,17 @@ def test_dominant_range_wins_most_of_the_pot():
         oop_range="TT", ip_range="22", board=RIVER_BOARD, pot=100, bet_sizes=[0.5, 1.0]
     )
     assert res.oop_ev > res.pot * 0.9
+
+
+def test_same_seed_reproduces_bit_identical_result():
+    def run() -> tuple[float, float]:
+        solver = MultiStreetEV(iterations=300, seed=7, max_combo_pairs=40)
+        res = solver.solve(
+            oop_range="AKs", ip_range="QJs", board=RIVER_BOARD, pot=100, bet_sizes=[0.5, 1.0]
+        )
+        return res.oop_ev, res.exploitability
+
+    assert run() == run()
 
 
 # ---------------------------------------------------------------------------
