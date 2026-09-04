@@ -293,3 +293,64 @@ def test_session_report_flag_shows_leak_table(tmp_path):
     result = runner.invoke(app, ["session", "--import", str(hh), "--report"])
     assert result.exit_code == 0, result.output
     assert "uncategorized" in result.output
+
+
+# ── icm-pressure ─────────────────────────────────────────────────────────────
+
+
+def test_icm_pressure_output_has_table():
+    result = runner.invoke(
+        app, ["icm-pressure", "--stacks", "5000,3000,2000", "--payouts", "0.5,0.3,0.2"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Bubble Factor" in result.output
+
+
+def test_icm_pressure_json_diagonal_is_one():
+    result = runner.invoke(
+        app, ["icm-pressure", "--stacks", "5000,3000,2000", "--payouts", "0.5,0.3,0.2", "--json"]
+    )
+    data = json.loads(result.output)
+    matrix = data["matrix"]
+    assert [matrix[i][i] for i in range(3)] == [1.0, 1.0, 1.0]
+    assert len(data["ranking"]) == 3
+
+
+def test_icm_pressure_chip_leader_is_most_pressured():
+    # Chip leader has the most ICM equity at stake and the least to gain
+    # proportionally from busting a micro stack — highest average BF, not
+    # the short stack (who has little left to lose).
+    result = runner.invoke(
+        app, ["icm-pressure", "--stacks", "9000,900,100", "--payouts", "0.5,0.3,0.2", "--json"]
+    )
+    data = json.loads(result.output)
+    assert data["ranking"][0]["player"] == 1
+
+
+# ── range-heatmap / icm-chart ───────────────────────────────────────────────
+
+
+def test_range_heatmap_saves_file(tmp_path):
+    out = tmp_path / "heatmap.png"
+    result = runner.invoke(app, ["range-heatmap", "--range", "22+,ATs+", "--save", str(out)])
+    assert result.exit_code == 0, result.output
+    assert out.exists()
+    assert out.stat().st_size > 0
+
+
+def test_range_heatmap_invalid_range_errors_cleanly():
+    result = runner.invoke(
+        app, ["range-heatmap", "--range", "not-a-range!!", "--save", "/tmp/x.png"]
+    )
+    assert result.exit_code != 0
+
+
+def test_icm_chart_saves_file(tmp_path):
+    out = tmp_path / "bubble.png"
+    result = runner.invoke(
+        app,
+        ["icm-chart", "--stacks", "5000,3000,2000", "--payouts", "0.5,0.3,0.2", "--save", str(out)],
+    )
+    assert result.exit_code == 0, result.output
+    assert out.exists()
+    assert out.stat().st_size > 0

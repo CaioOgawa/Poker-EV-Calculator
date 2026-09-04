@@ -267,6 +267,58 @@ def nash(
     console.print(table)
 
 
+@app.command("icm-pressure")
+def icm_pressure(
+    stacks: str = typer.Option(
+        ..., "--stacks", help="Comma-separated stack sizes, e.g. 5000,3000,2000"
+    ),
+    payouts: str = typer.Option(
+        ..., "--payouts", help="Comma-separated payout fractions, e.g. 0.5,0.3,0.2"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Bubble factor matrix — how much riskier a chip confrontation is under ICM."""
+    from engine.icm.pressure import ICMPressure
+
+    try:
+        stack_list = [float(s) for s in stacks.split(",")]
+        payout_list = [float(p) for p in payouts.split(",")]
+    except ValueError:
+        raise typer.BadParameter("--stacks and --payouts must be comma-separated numbers")
+
+    pressure = ICMPressure()
+    try:
+        matrix = pressure.all_bubble_factors(stack_list, payout_list)
+        ranking = pressure.pressure_ranking(stack_list, payout_list)
+    except (ValueError, ZeroDivisionError) as e:
+        _die(str(e))
+
+    def clean(v: float) -> float | str:
+        return "inf" if v == float("inf") else round(v, 3)
+
+    result = {
+        "matrix": [[clean(v) for v in row] for row in matrix],
+        "ranking": [{"player": i + 1, "avg_bubble_factor": clean(bf)} for i, bf in ranking],
+    }
+
+    if json_output:
+        typer.echo(_json.dumps(result))
+        return
+
+    n = len(stack_list)
+    table = Table(title="Bubble Factor (row risks chips vs column)")
+    table.add_column("")
+    for j in range(n):
+        table.add_column(f"P{j + 1}", justify="right")
+    for i in range(n):
+        table.add_row(f"P{i + 1}", *[str(clean(matrix[i][j])) for j in range(n)])
+    console.print(table)
+
+    console.print("\n[bold]Most pressured (highest avg BF first):[/]")
+    for i, bf in ranking:
+        console.print(f"  P{i + 1}: {clean(bf)}")
+
+
 @app.command()
 def roi(
     buyins: str = typer.Option(..., "--buyins", help="Comma-separated buy-ins, e.g. 100,100,100"),
@@ -438,6 +490,66 @@ def session(
 
     if pdf:
         console.print(f"[green]PDF written to {pdf}[/]")
+
+
+@app.command("range-heatmap")
+def range_heatmap(
+    range_str: str = typer.Option(..., "--range", help="Range string, e.g. '22+,ATs+,KQo'"),
+    save: str = typer.Option(..., "--save", help="Output image path, e.g. heatmap.png"),
+    title: str = typer.Option("Range", "--title", help="Chart title"),
+    cmap: str = typer.Option("YlOrRd", "--cmap", help="Matplotlib colormap name"),
+) -> None:
+    """Render a 13x13 starting-hand grid for a range to an image file."""
+    try:
+        from output.charts.range_heatmap import RangeHeatmap
+    except ImportError as e:
+        _die(f"{e} (install with: pip install -e '.[charts]')")
+
+    heatmap = RangeHeatmap()
+    try:
+        matrix = heatmap.matrix_from_range(range_str)
+    except ValueError as e:
+        _die(str(e))
+
+    try:
+        heatmap.plot(matrix, title=title, cmap=cmap, save_path=save)
+    except ImportError as e:
+        _die(f"{e} (install with: pip install -e '.[charts]')")
+
+    console.print(f"[green]Saved to {save}[/]")
+
+
+@app.command("icm-chart")
+def icm_chart(
+    stacks: str = typer.Option(
+        ..., "--stacks", help="Comma-separated stack sizes, e.g. 5000,3000,2000"
+    ),
+    payouts: str = typer.Option(
+        ..., "--payouts", help="Comma-separated payout fractions, e.g. 0.5,0.3,0.2"
+    ),
+    save: str = typer.Option(..., "--save", help="Output image path, e.g. bubble.png"),
+    title: str = typer.Option("ICM Bubble Factor", "--title", help="Chart title"),
+    cmap: str = typer.Option("RdYlGn_r", "--cmap", help="Matplotlib colormap name"),
+) -> None:
+    """Render the ICM bubble-factor matrix (all players vs all players) to an image file."""
+    try:
+        from output.charts.icm_pressure_chart import ICMPressureChart
+    except ImportError as e:
+        _die(f"{e} (install with: pip install -e '.[charts]')")
+
+    try:
+        stack_list = [float(s) for s in stacks.split(",")]
+        payout_list = [float(p) for p in payouts.split(",")]
+    except ValueError:
+        raise typer.BadParameter("--stacks and --payouts must be comma-separated numbers")
+
+    chart = ICMPressureChart()
+    try:
+        chart.plot(stack_list, payout_list, title=title, cmap=cmap, save_path=save)
+    except (ValueError, ZeroDivisionError, ImportError) as e:
+        _die(str(e))
+
+    console.print(f"[green]Saved to {save}[/]")
 
 
 if __name__ == "__main__":

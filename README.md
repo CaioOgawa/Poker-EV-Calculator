@@ -35,9 +35,12 @@ poker eval --hero AsKs --board QhJsTs
 poker equity --hero AsKs --villain "QQ+,AKs" --board QhJsTs
 poker icm --stacks 5000,3000,2000 --payouts 0.5,0.3,0.2 --total 1000
 poker nash --stacks 3000,7000 --payouts 0.65,0.35
+poker icm-pressure --stacks 5000,3000,2000 --payouts 0.5,0.3,0.2
 poker roi --buyins 100,100,100 --cashes 0,200,500
 poker bankroll --bankroll 5000 --winrate 5 --std 90
 poker session --import history.txt --report
+poker range-heatmap --range "22+,ATs+,KQo" --save heatmap.png
+poker icm-chart --stacks 5000,3000,2000 --payouts 0.5,0.3,0.2 --save bubble.png
 ```
 
 Todos os comandos aceitam `--json` para saída em JSON (bom para scripts/pipes).
