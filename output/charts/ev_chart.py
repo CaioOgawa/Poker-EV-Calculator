@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+from itertools import accumulate
+
 try:
     import matplotlib.pyplot as plt
 
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
+
+
+def _cumulative(results: list[float]) -> list[float]:
+    """Running total of `results` — kept separate from rendering so the
+    O(n) `accumulate()` swap (was O(n²) via `sum(results[:i+1])`) is
+    unit-testable without a figure."""
+    return list(accumulate(results))
 
 
 class EVChart:
@@ -25,7 +34,7 @@ class EVChart:
         """
         if not MATPLOTLIB_AVAILABLE:
             raise ImportError("matplotlib required for output module")
-        cumulative = [sum(results[: i + 1]) for i in range(len(results))]
+        cumulative = _cumulative(results)
         plt.figure(figsize=(12, 5))
         plt.plot(cumulative, label="Actual", color="steelblue")
         if ev_line:

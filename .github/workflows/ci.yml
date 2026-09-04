@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+# The auto-commit hook can push to main several times in quick succession —
+# cancel a run still in flight when a newer push on the same ref supersedes it,
+# instead of queuing (and paying for) redundant runs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest

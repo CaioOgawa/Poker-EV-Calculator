@@ -67,6 +67,17 @@ def test_chip_leader_ordering():
     assert abs(sum(eq) - 1.0) < TOL
 
 
+def test_equity_of_matches_full_equity():
+    stacks, payouts = [5000, 3000, 2000], [0.5, 0.3, 0.2]
+    full = m.equity(stacks, payouts)
+    for i in range(len(stacks)):
+        assert abs(m.equity_of(i, stacks, payouts) - full[i]) < TOL
+
+
+def test_equity_of_busted_player_is_zero():
+    assert m.equity_of(2, [6000, 4000, 0], [0.5, 0.3, 0.2]) == 0.0
+
+
 def test_performance_ten_players():
     # 10-player final table must complete in under 1 second
     rng = random.Random(0)

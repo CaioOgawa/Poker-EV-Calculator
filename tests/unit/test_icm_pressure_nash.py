@@ -38,6 +38,20 @@ def test_bf_equal_stacks_symmetric():
     assert abs(bf_01 - bf_10) < 1e-9
 
 
+def test_bf_eq_base_hero_override_matches_computed():
+    # docs/AUDITORIA-2026-08-26.md item I2: all_bubble_factors passes a
+    # precomputed eq_base_hero to skip redundant baseline solves — must not
+    # change the result vs letting bubble_factor compute it itself.
+    from engine.icm.model import ICMModel
+
+    eq_base_hero = ICMModel().equity_of(0, STACKS_3, PAYOUTS_3)
+    without_override = pressure.bubble_factor(STACKS_3, PAYOUTS_3, hero=0, villain=2)
+    with_override = pressure.bubble_factor(
+        STACKS_3, PAYOUTS_3, hero=0, villain=2, eq_base_hero=eq_base_hero
+    )
+    assert without_override == with_override
+
+
 def test_bf_diagonal_is_one_in_matrix():
     matrix = pressure.all_bubble_factors(STACKS_3, PAYOUTS_3)
     for i in range(3):

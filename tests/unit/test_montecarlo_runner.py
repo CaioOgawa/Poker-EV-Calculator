@@ -39,6 +39,14 @@ def test_run_ev_does_not_leak_global_random_state():
     assert random.getstate() == prior
 
 
+def test_run_ev_keep_raw_false_drops_raw_but_keeps_stats():
+    sim = MonteCarloSim(iterations=500, seed=0)
+    result = sim.run_ev(_ev_fn, keep_raw=False, x=10.0)
+    assert result.raw == []
+    assert result.iterations == 500
+    assert abs(result.mean_ev - 10.5) < 0.1
+
+
 def test_run_ev_p5_p95_bracket_mean():
     sim = MonteCarloSim(iterations=5_000, seed=0)
     result = sim.run_ev(_ev_fn, x=0.0)
@@ -60,6 +68,15 @@ def test_run_ev_parallel_reproducible_with_seed():
     r1 = MonteCarloSim(iterations=300, seed=11).run_ev(_ev_fn, n_jobs=2, x=1.0)
     r2 = MonteCarloSim(iterations=300, seed=11).run_ev(_ev_fn, n_jobs=2, x=1.0)
     assert r1.raw == r2.raw
+
+
+def test_run_ev_parallel_handles_iterations_not_divisible_by_n_jobs():
+    # 301 iterations over 4 jobs doesn't divide evenly — every iteration
+    # must still land in exactly one chunk.
+    sim = MonteCarloSim(iterations=301, seed=3)
+    result = sim.run_ev(_ev_fn, n_jobs=4, x=1.0)
+    assert result.iterations == 301
+    assert len(result.raw) == 301
 
 
 def test_run_ev_parallel_mean_close_to_sequential():

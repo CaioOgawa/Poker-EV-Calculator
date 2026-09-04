@@ -10,7 +10,15 @@ matplotlib.use("Agg")
 
 import pytest
 
-from output.charts.ev_chart import EVChart
+from output.charts.ev_chart import EVChart, _cumulative
+
+
+def test_cumulative_running_total():
+    assert _cumulative([10.0, -5.0, 20.0, 3.0]) == [10.0, 5.0, 25.0, 28.0]
+
+
+def test_cumulative_empty():
+    assert _cumulative([]) == []
 
 
 def test_plot_bankroll_saves_file(tmp_path):
