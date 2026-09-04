@@ -11,6 +11,7 @@ would multiply, not just add, the per-side combo counts.
 
 from __future__ import annotations
 import random as _random_mod
+from itertools import accumulate
 from treys import Evaluator, Card, Deck
 
 from core.ranges.range_parser import RangeParser
@@ -142,36 +143,94 @@ class EquityCalculator:
         hero_set = set(hero_c + board_c)
 
         all_combos = _PARSER.parse(villain_range)
-        # Filter combos blocked by hero/board
-        available = [(_to_cards(list(combo)), combo) for combo in all_combos]
         available = [
-            (cards, combo) for cards, combo in available if not any(c in hero_set for c in cards)
+            _to_cards(list(combo))
+            for combo in all_combos
+            if not any(c in hero_set for c in _to_cards(list(combo)))
         ]
         if not available:
             raise ValueError(
                 f"No unblocked combos in range '{villain_range}' given hero {hero} board {board}"
             )
 
+        return self._vs_weighted(hero_c, board_c, [(cards, 1.0) for cards in available], seed=seed)
+
+    def vs_weighted_range(
+        self,
+        hero: list[str],
+        weighted_hands: list[tuple[str, float]],
+        board: list[str] | None = None,
+        *,
+        seed: int | None = None,
+    ) -> float:
+        """Hero equity [0, 1] vs a range where each canonical hand carries its
+        own weight — e.g. `PreflopChart.combo_weighted_range('push')` fed in
+        directly (docs/AUDITORIA-2026-08-26.md item F5), so a solver's mixed
+        strategy (AKs pushed 60% of the time) shapes equity instead of
+        collapsing to `vs_range`'s binary in/out range.
+
+        Every combo of a given canonical hand shares that hand's weight — a
+        mixed strategy is a frequency over hand *classes*, not individual
+        combos, so the 4 AKs combos are indistinguishable to a chart. Same
+        need==0/1/2+ exact-vs-Monte-Carlo dispatch as `vs_range`
+        (docs/AUDITORIA-2026-08-26.md item I1).
+        """
+        board = board or []
+        _check_no_duplicates({"hero": hero, "board": board})
+        hero_c = _to_cards(hero)
+        board_c = _to_cards(board)
+        hero_set = set(hero_c + board_c)
+
+        weighted_combos = [
+            (cards, weight)
+            for hand, weight in weighted_hands
+            if weight > 0.0
+            for combo in _PARSER.expand_hand(hand)
+            for cards in [_to_cards(list(combo))]
+            if not any(c in hero_set for c in cards)
+        ]
+        if not weighted_combos:
+            raise ValueError(
+                f"No unblocked, positively-weighted combos given hero {hero} board {board}"
+            )
+
+        return self._vs_weighted(hero_c, board_c, weighted_combos, seed=seed)
+
+    def _vs_weighted(
+        self,
+        hero_c: list[int],
+        board_c: list[int],
+        weighted_combos: list[tuple[list[int], float]],
+        *,
+        seed: int | None,
+    ) -> float:
+        """Shared engine behind `vs_range`/`vs_weighted_range`: `vs_range`
+        calls this with every combo weighted 1.0, which is exactly its old
+        flat-average behavior since a weighted average over equal weights is
+        the flat average.
+        """
+        hero_set = set(hero_c) | set(board_c)
         need = 5 - len(board_c)
+        total_weight = sum(w for _, w in weighted_combos)
 
         if need == 0:
             hero_rank = self._eval.evaluate(board_c, hero_c)
             wins = sum(
-                _win_share(hero_rank, self._eval.evaluate(board_c, cards)) for cards, _ in available
+                w * _win_share(hero_rank, self._eval.evaluate(board_c, cards))
+                for cards, w in weighted_combos
             )
-            return wins / len(available)
+            return wins / total_weight
 
         if need == 1:
-            # Average-of-averages, not a flat win/total ratio: the villain
-            # combo is uniform over `available` (matching the MC branch's
-            # `rng.choice(available)`), the runout is uniform *given* that
-            # combo. Each combo's own runout count varies with what its two
-            # cards block, so weighting by combo first and runout second
-            # inside that combo is what reproduces the MC estimator's
-            # weighting exactly — a flat accumulation would only coincide
-            # with this by every combo happening to have the same deck size.
-            per_combo_equity = []
-            for cards, _ in available:
+            # Weighted average-of-averages, not a flat win/total ratio: the
+            # villain combo is drawn proportional to its weight (matching the
+            # MC branch's `rng.choices(..., weights=...)`), the runout is
+            # uniform *given* that combo. Each combo's own runout count
+            # varies with what its two cards block, so weighting by combo
+            # first and runout second inside that combo is what reproduces
+            # the MC estimator's weighting exactly.
+            weighted_wins = 0.0
+            for cards, w in weighted_combos:
                 villain_set = set(cards)
                 deck = [c for c in _full_deck() if c not in hero_set and c not in villain_set]
                 wins = 0.0
@@ -180,14 +239,16 @@ class EquityCalculator:
                     h = self._eval.evaluate(run_board, hero_c)
                     v = self._eval.evaluate(run_board, cards)
                     wins += _win_share(h, v)
-                per_combo_equity.append(wins / len(deck))
-            return sum(per_combo_equity) / len(per_combo_equity)
+                weighted_wins += w * (wins / len(deck))
+            return weighted_wins / total_weight
 
         deck_base = [c for c in _full_deck() if c not in hero_set]
         rng = _random_mod.Random(seed) if seed is not None else self._rng
+        combos_only = [cards for cards, _ in weighted_combos]
+        cum_weights = list(accumulate(w for _, w in weighted_combos))
         wins = 0.0
         for _ in range(self.iterations):
-            villain_c, _ = rng.choice(available)
+            (villain_c,) = rng.choices(combos_only, cum_weights=cum_weights, k=1)
             villain_set = set(villain_c)
             deck = [c for c in deck_base if c not in villain_set]
             rng.shuffle(deck)

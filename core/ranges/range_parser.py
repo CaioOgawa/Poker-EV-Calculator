@@ -40,6 +40,14 @@ class RangeParser:
     def combo_count(self, range_str: str) -> int:
         return len(self.parse(range_str))
 
+    def expand_hand(self, hand: str) -> list[tuple[str, str]]:
+        """Combos for one canonical hand (e.g. 'AKs', '77') — no comma lists,
+        '+' ranges, or dashes. For consumers that already have a canonical
+        hand (a chart lookup, `combo_weighted_range`) and need its combos
+        without going through range-string syntax.
+        """
+        return self._parse_token(hand)
+
     # ------------------------------------------------------------------
     def _validate_ranks(self, ranks: str, original: str) -> None:
         for ch in ranks:
