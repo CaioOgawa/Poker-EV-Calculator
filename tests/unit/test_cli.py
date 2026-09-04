@@ -411,3 +411,45 @@ def test_sim_multitable_beats_single_table_mean():
     single_mean = json.loads(single.output)["mean_final_bb"]
     multi_mean = json.loads(multi.output)["mean_final_bb"]
     assert multi_mean > single_mean
+
+
+# ── solve ─────────────────────────────────────────────────────────────────────
+
+# River-only (4-card board) is the fast solve path — a 3-card/flop board
+# takes minutes even with small ranges (see docs/ROADMAP.md), so no CLI
+# test exercises that path.
+_SOLVE_ARGS = [
+    "solve",
+    "--oop",
+    "AKs",
+    "--ip",
+    "QJs",
+    "--board",
+    "2c7dThKs",
+    "--pot",
+    "100",
+    "--iterations",
+    "300",
+    "--seed",
+    "1",
+]
+
+
+def test_solve_output_has_summary():
+    result = runner.invoke(app, _SOLVE_ARGS)
+    assert result.exit_code == 0, result.output
+    assert "Exploitability" in result.output
+
+
+def test_solve_json_ev_sums_to_pot():
+    result = runner.invoke(app, [*_SOLVE_ARGS, "--json"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["oop_ev"] + data["ip_ev"] == pytest.approx(data["pot"], abs=1e-3)
+
+
+def test_solve_rejects_bad_board_length():
+    result = runner.invoke(
+        app, ["solve", "--oop", "AKs", "--ip", "QJs", "--board", "2c7dTh9h5c", "--pot", "100"]
+    )
+    assert result.exit_code != 0

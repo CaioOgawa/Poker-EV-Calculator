@@ -633,5 +633,55 @@ def sim(
     )
 
 
+@app.command()
+def solve(
+    oop: str = typer.Option(..., "--oop", help="Out-of-position range, e.g. AKs,QQ+"),
+    ip: str = typer.Option(..., "--ip", help="In-position range, e.g. QJs,TT-88"),
+    board: str = typer.Option(
+        ..., "--board", help="Board cards, 3 (flop) or 4 (turn), e.g. 2c7dThKs"
+    ),
+    pot: float = typer.Option(..., "--pot", help="Starting pot (bb)"),
+    bet_sizes: str = typer.Option("0.5,1.0", "--bet-sizes", help="Comma-separated pot fractions"),
+    iterations: int = typer.Option(400, "--iterations", help="CFR training iterations"),
+    max_combo_pairs: int = typer.Option(30, "--max-combo-pairs", help="Cap on legal combo pairs"),
+    seed: Optional[int] = typer.Option(
+        None, "--seed", help="RNG seed (omit for non-deterministic)"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Chance-sampled CFR-lite solve for a single postflop street (river-only,
+    a 4-card board, is fast; a 3-card/flop board is expensive — minutes even
+    with small ranges, see docs/ROADMAP.md."""
+    from engine.ev.multistreet import MultiStreetEV
+
+    board_cards = _parse_cards(board)
+    try:
+        bet_size_list = [float(b) for b in bet_sizes.split(",")]
+    except ValueError:
+        raise typer.BadParameter("--bet-sizes must be comma-separated numbers")
+
+    solver = MultiStreetEV(iterations=iterations, seed=seed, max_combo_pairs=max_combo_pairs)
+    try:
+        res = solver.solve(oop, ip, board_cards, pot, bet_size_list)
+    except ValueError as e:
+        _die(str(e))
+
+    result = {
+        "pot": res.pot,
+        "oop_ev": round(res.oop_ev, 4),
+        "ip_ev": round(res.ip_ev, 4),
+        "exploitability": round(res.exploitability, 4),
+    }
+
+    if json_output:
+        typer.echo(_json.dumps(result))
+        return
+
+    console.print(f"Pot            : {result['pot']} bb")
+    console.print(f"OOP EV         : {result['oop_ev']} bb")
+    console.print(f"IP EV          : {result['ip_ev']} bb")
+    console.print(f"Exploitability : {result['exploitability']} bb (lower = closer to Nash)")
+
+
 if __name__ == "__main__":
     app()
