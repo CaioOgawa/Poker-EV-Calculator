@@ -1,4 +1,8 @@
 import random
+import statistics
+
+import numpy as np
+import pytest
 
 from simulation.montecarlo.runner import MonteCarloSim, MonteCarloResult
 
@@ -51,6 +55,43 @@ def test_run_ev_p5_p95_bracket_mean():
     sim = MonteCarloSim(iterations=5_000, seed=0)
     result = sim.run_ev(_ev_fn, x=0.0)
     assert result.p5 <= result.mean_ev <= result.p95
+
+
+# ------------------------------------------------------------------
+# sample stats, not population (docs/AUDITORIA-2026-08-26.md item E8)
+# ------------------------------------------------------------------
+
+
+def test_run_ev_std_dev_is_sample_not_population():
+    # /n underestimates spread vs. the unbiased /(n-1) estimator — the two
+    # definitions diverge visibly at small n, so this is a real behavior
+    # change to the reported number, not noise.
+    values = [1.0, 2.0, 3.0, 4.0, 5.0]
+    it = iter(values)
+    sim = MonteCarloSim(iterations=len(values))
+    result = sim.run_ev(lambda: next(it))
+    assert result.std_dev == pytest.approx(statistics.stdev(values))
+    assert result.std_dev != pytest.approx(statistics.pstdev(values))
+
+
+def test_run_ev_std_dev_zero_for_single_iteration():
+    # ddof=1 is undefined at n<=1 (no spread to estimate from one point) —
+    # falls back to 0.0 rather than propagating NaN.
+    sim = MonteCarloSim(iterations=1)
+    result = sim.run_ev(lambda: 5.0)
+    assert result.std_dev == 0.0
+
+
+def test_run_ev_percentiles_use_interpolation():
+    values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    it = iter(values)
+    sim = MonteCarloSim(iterations=len(values))
+    result = sim.run_ev(lambda: next(it))
+    assert result.p5 == pytest.approx(np.percentile(values, 5))
+    assert result.p95 == pytest.approx(np.percentile(values, 95))
+    # The old truncated-index lookup gave sorted[int(10*0.05)] == sorted[0]
+    # == 1.0 exactly; interpolation lands strictly above the minimum.
+    assert result.p5 > 1.0
 
 
 # ------------------------------------------------------------------

@@ -5,6 +5,7 @@ import os
 import random
 from dataclasses import dataclass, field
 
+import numpy as np
 from joblib import Parallel, delayed
 
 
@@ -89,16 +90,30 @@ class MonteCarloSim:
                 delayed(_run_chunk)(ev_fn, kwargs, chunk) for chunk in chunks
             )
             results = [r for chunk in chunked_results for r in chunk]
-        results_sorted = sorted(results)
-        n = len(results_sorted)
-        mean = sum(results) / n
-        variance = sum((x - mean) ** 2 for x in results) / n
-        std = variance**0.5
+        results_arr = np.asarray(results)
+        n = len(results_arr)
+        # Sample stats, not population (docs/AUDITORIA-2026-08-26.md item
+        # E8): `results` is a sample of the EV distribution, not the whole
+        # population, so std_dev needs Bessel's correction (ddof=1) to be
+        # unbiased — /n underestimates spread, more so at small n. ddof=1 is
+        # undefined at n<=1 (no spread to estimate from one point), so that
+        # case falls back to 0.0 rather than propagating NaN. p5/p95 switch
+        # from a truncated-index lookup to linear interpolation between
+        # order statistics (numpy's default, and what the rest of the repo's
+        # percentile calls already use in cash_session.py/simulator.py) —
+        # both are real behavior changes to MonteCarloResult's reported
+        # numbers, not bug fixes with an obviously-right answer, so this was
+        # held for an explicit decision rather than folded into I5's chunking
+        # rewrite.
+        mean = float(np.mean(results_arr))
+        std = float(np.std(results_arr, ddof=1)) if n > 1 else 0.0
+        p5 = float(np.percentile(results_arr, 5))
+        p95 = float(np.percentile(results_arr, 95))
         return MonteCarloResult(
             iterations=n,
             mean_ev=mean,
             std_dev=std,
-            p5=results_sorted[int(n * 0.05)],
-            p95=results_sorted[int(n * 0.95)],
+            p5=p5,
+            p95=p95,
             raw=results if keep_raw else [],
         )
