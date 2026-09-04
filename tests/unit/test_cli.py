@@ -503,3 +503,102 @@ def test_vision_detect_missing_file_errors_cleanly():
     # loaded, so this doesn't need trained weights to exercise the error path.
     result = runner.invoke(app, ["vision", "detect", "/no/such/image.jpg"])
     assert result.exit_code != 0
+
+
+# ── cash-session ─────────────────────────────────────────────────────────────
+
+_CASH_SESSION_ARGS = [
+    "cash-session",
+    "--winrate",
+    "5",
+    "--std",
+    "90",
+    "--hands",
+    "500",
+    "--num-trials",
+    "1000",
+]
+
+
+def test_cash_session_output_has_summary():
+    result = runner.invoke(app, _CASH_SESSION_ARGS)
+    assert result.exit_code == 0, result.output
+    assert "Losing sessions" in result.output
+
+
+def test_cash_session_json_keys():
+    result = runner.invoke(app, [*_CASH_SESSION_ARGS, "--json"])
+    data = json.loads(result.output)
+    assert set(data.keys()) >= {
+        "trials",
+        "mean_result_bb",
+        "p5_bb",
+        "p50_bb",
+        "p95_bb",
+        "losing_session_rate",
+        "mean_hands_played",
+        "stopped_early_rate",
+    }
+
+
+def test_cash_session_stop_loss_caps_downside():
+    # A stop-loss can still overshoot -20bb within a single hand's swing (it's
+    # checked on cumulative result per hand, not continuously), so p5 isn't
+    # bounded exactly at -20 — but it must be far less negative than letting
+    # the same session run without any stop rule.
+    with_stop = runner.invoke(app, [*_CASH_SESSION_ARGS, "--stop-loss", "20", "--json"])
+    without_stop = runner.invoke(app, [*_CASH_SESSION_ARGS, "--json"])
+    data_with = json.loads(with_stop.output)
+    data_without = json.loads(without_stop.output)
+    assert data_with["stopped_early_rate"] > 0
+    assert data_with["p5_bb"] > data_without["p5_bb"]
+
+
+def test_cash_session_rejects_nonpositive_hands():
+    result = runner.invoke(app, ["cash-session", "--winrate", "5", "--std", "90", "--hands", "0"])
+    assert result.exit_code != 0
+
+
+# ── multitable ───────────────────────────────────────────────────────────────
+
+_MULTITABLE_ARGS = [
+    "multitable",
+    "--tables",
+    "4",
+    "--winrate",
+    "5",
+    "--std",
+    "90",
+    "--correlation",
+    "0.5",
+    "--num-trials",
+    "1000",
+]
+
+
+def test_multitable_output_has_summary():
+    result = runner.invoke(app, _MULTITABLE_ARGS)
+    assert result.exit_code == 0, result.output
+    assert "Combined mean" in result.output
+
+
+def test_multitable_json_keys():
+    result = runner.invoke(app, [*_MULTITABLE_ARGS, "--json"])
+    data = json.loads(result.output)
+    assert set(data.keys()) >= {"trials", "combined_mean_bb", "combined_std_bb"}
+
+
+def test_multitable_full_correlation_std_scales_by_n_not_sqrt_n():
+    # rho=1 => no diversification: combined std = N * single-table std (90),
+    # not sqrt(N) * 90 like the independent case.
+    result = runner.invoke(app, [*_MULTITABLE_ARGS, "--correlation", "1.0", "--json"])
+    data = json.loads(result.output)
+    assert data["combined_std_bb"] == pytest.approx(4 * 90, rel=0.1)
+
+
+def test_multitable_rejects_correlation_out_of_range():
+    result = runner.invoke(
+        app,
+        ["multitable", "--tables", "2", "--winrate", "5", "--std", "90", "--correlation", "1.5"],
+    )
+    assert result.exit_code != 0

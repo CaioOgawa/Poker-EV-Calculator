@@ -760,5 +760,99 @@ def vision_detect(
     console.print(table)
 
 
+@app.command("cash-session")
+def cash_session(
+    winrate: float = typer.Option(..., "--winrate", help="Win rate in BB/100"),
+    std: float = typer.Option(..., "--std", help="Standard deviation in BB/100"),
+    hands: int = typer.Option(..., "--hands", help="Hand cap per session"),
+    num_trials: int = typer.Option(10_000, "--num-trials"),
+    stop_loss: Optional[float] = typer.Option(
+        None, "--stop-loss", help="Quit at -N bb (positive number)"
+    ),
+    stop_win: Optional[float] = typer.Option(None, "--stop-win", help="Quit at +N bb"),
+    seed: Optional[int] = typer.Option(42, "--seed", help="RNG seed (omit for non-deterministic)"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Simulate one cash-game session (hand-by-hand), with optional stop-loss/stop-win."""
+    from simulation.scenarios.cash_session import CashSessionSim
+
+    sim = CashSessionSim()
+    try:
+        res = sim.simulate(winrate, std, hands, num_trials, stop_loss, stop_win, seed)
+    except ValueError as e:
+        _die(str(e))
+
+    result = {
+        "trials": res.trials,
+        "mean_result_bb": round(res.mean_result, 2),
+        "std_result_bb": round(res.std_result, 2),
+        "p5_bb": round(res.p5, 2),
+        "p50_bb": round(res.p50, 2),
+        "p95_bb": round(res.p95, 2),
+        "losing_session_rate": round(res.losing_session_rate * 100, 2),
+        "mean_hands_played": round(res.mean_hands_played, 1),
+        "stopped_early_rate": round(res.stopped_early_rate * 100, 2),
+    }
+
+    if json_output:
+        typer.echo(_json.dumps(result))
+        return
+
+    console.print(f"Trials              : {result['trials']:,}")
+    console.print(f"Mean result         : {result['mean_result_bb']:,.2f} bb")
+    console.print(
+        "p5 / p50 / p95      : "
+        f"{result['p5_bb']:,.2f} / {result['p50_bb']:,.2f} / {result['p95_bb']:,.2f} bb"
+    )
+    console.print(f"Losing sessions     : {result['losing_session_rate']}%")
+    console.print(f"Mean hands played   : {result['mean_hands_played']:,.1f} / {hands}")
+    console.print(f"Stopped early       : {result['stopped_early_rate']}%")
+
+
+@app.command("multitable")
+def multitable(
+    tables: int = typer.Option(..., "--tables", help="Number of simultaneous tables"),
+    winrate: float = typer.Option(..., "--winrate", help="Per-table win rate in BB/100"),
+    std: float = typer.Option(..., "--std", help="Per-table standard deviation in BB/100"),
+    correlation: float = typer.Option(
+        ..., "--correlation", help="Pairwise correlation between tables, in [0, 1]"
+    ),
+    hands_per_session: int = typer.Option(100, "--hands-per-session"),
+    num_trials: int = typer.Option(10_000, "--num-trials"),
+    seed: Optional[int] = typer.Option(42, "--seed", help="RNG seed (omit for non-deterministic)"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Simulate one session's combined result across correlated simultaneous tables."""
+    from simulation.scenarios.multitable import MultitableSim
+
+    sim = MultitableSim()
+    try:
+        res = sim.simulate(tables, winrate, std, correlation, hands_per_session, num_trials, seed)
+    except ValueError as e:
+        _die(str(e))
+
+    result = {
+        "trials": res.trials,
+        "combined_mean_bb": round(res.combined_mean, 2),
+        "combined_std_bb": round(res.combined_std, 2),
+        "p5_bb": round(res.p5, 2),
+        "p50_bb": round(res.p50, 2),
+        "p95_bb": round(res.p95, 2),
+    }
+
+    if json_output:
+        typer.echo(_json.dumps(result))
+        return
+
+    console.print(f"Tables              : {tables} (correlation={correlation})")
+    console.print(f"Trials              : {result['trials']:,}")
+    console.print(f"Combined mean       : {result['combined_mean_bb']:,.2f} bb")
+    console.print(f"Combined std        : {result['combined_std_bb']:,.2f} bb")
+    console.print(
+        "p5 / p50 / p95      : "
+        f"{result['p5_bb']:,.2f} / {result['p50_bb']:,.2f} / {result['p95_bb']:,.2f} bb"
+    )
+
+
 if __name__ == "__main__":
     app()
