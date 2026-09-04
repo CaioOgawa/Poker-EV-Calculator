@@ -31,7 +31,7 @@ poker = "cli.main:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "engine*", "risk*", "simulation*", "vision*", "output*", "cli*"]
+include = ["core*", "engine*", "risk*", "simulation*", "vision*", "output*", "cli*", "data*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -43,6 +43,7 @@ poker eval --hero AsKs --board QhJsTs
 poker equity --hero AsKs --villain "QQ+,AKs" --board QhJsTs
 poker icm --stacks 5000,3000,2000 --payouts 0.5,0.3,0.2 --total 1000
 poker roi --buyins 100,100,100 --cashes 0,200,500
+poker session --import history.txt --report
 ```
 
 Todos os comandos aceitam `--json` para saída em JSON (bom para scripts/pipes).

@@ -252,5 +252,67 @@ def roi(
     console.print(f"ITM         : {result['itm_rate']}%")
 
 
+@app.command()
+def session(
+    import_file: str = typer.Option(
+        ..., "--import", help="PokerStars hand history file (cash games only)"
+    ),
+    report: bool = typer.Option(False, "--report", help="Show per-category leak breakdown"),
+    pdf: Optional[str] = typer.Option(None, "--pdf", help="Also export a PDF report to this path"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Import a PokerStars hand history and print a session summary (BB units)."""
+    from data.parsers.pokerstars import PokerStarsParser, hands_to_session
+
+    try:
+        parsed = PokerStarsParser().parse_file(import_file)
+    except FileNotFoundError:
+        _die(f"File not found: {import_file}")
+    except ValueError as e:
+        _die(str(e))
+
+    if not parsed:
+        _die("No hands found in file")
+
+    session_report = hands_to_session(parsed)
+    summary = session_report.summary()
+
+    if pdf:
+        from output.reports.pdf_export import PDFExporter
+
+        try:
+            PDFExporter().export_session(session_report, pdf)
+        except ImportError as e:
+            _die(str(e))
+
+    if json_output:
+        typer.echo(_json.dumps(summary))
+        return
+
+    console.print(f"Session    : {summary['session_id']}")
+    console.print(f"Hands      : {summary['hands_played']}")
+    console.print(f"Result     : {summary['total_result']} bb")
+    console.print(
+        f"EV         : {summary['total_ev']} bb  "
+        "[dim](decision-level EV not computed from hand history)[/]"
+    )
+    console.print(f"Luck-adj.  : {summary['luck_adjusted']} bb")
+
+    if report:
+        from output.reports.leak_report import LeakReport
+
+        leaks = LeakReport().by_category(session_report.hands)
+        table = Table(title="Leaks by category")
+        table.add_column("Category")
+        table.add_column("Hands", justify="right")
+        table.add_column("Total result (bb)", justify="right")
+        for leak in leaks:
+            table.add_row(leak.category, str(leak.hands), str(leak.total_result))
+        console.print(table)
+
+    if pdf:
+        console.print(f"[green]PDF written to {pdf}[/]")
+
+
 if __name__ == "__main__":
     app()
