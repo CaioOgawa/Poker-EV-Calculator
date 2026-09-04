@@ -157,3 +157,139 @@ def test_roi_json_negative_roi():
     result = runner.invoke(app, ["roi", "--buyins", "100,100,100", "--cashes", "0,0,50", "--json"])
     data = json.loads(result.output)
     assert data["roi"] < 0
+
+
+# ── nash ──────────────────────────────────────────────────────────────────────
+
+
+def test_nash_output_has_table():
+    result = runner.invoke(
+        app, ["nash", "--stacks", "3000,7000", "--payouts", "0.65,0.35", "--json"]
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_nash_json_keys():
+    result = runner.invoke(
+        app, ["nash", "--stacks", "3000,7000", "--payouts", "0.65,0.35", "--json"]
+    )
+    data = json.loads(result.output)
+    assert set(data.keys()) == {
+        "hero_stack",
+        "villain_stack",
+        "push_range",
+        "push_pct",
+        "call_range",
+        "call_pct",
+    }
+
+
+def test_nash_short_stack_pushes_wide():
+    # 3bb effective stack (sb=50, bb=100, stack=300) — hero should be
+    # shoving the large majority of hands.
+    result = runner.invoke(
+        app,
+        [
+            "nash",
+            "--stacks",
+            "300,300",
+            "--sb",
+            "50",
+            "--bb",
+            "100",
+            "--payouts",
+            "0.65,0.35",
+            "--json",
+        ],
+    )
+    data = json.loads(result.output)
+    assert data["push_pct"] > 70.0
+
+
+def test_nash_rejects_wrong_stack_count():
+    result = runner.invoke(app, ["nash", "--stacks", "3000,7000,1000", "--payouts", "0.5,0.3,0.2"])
+    assert result.exit_code != 0
+    assert "exactly 2 values" in result.output
+
+
+# ── bankroll ──────────────────────────────────────────────────────────────────
+
+
+def test_bankroll_output_has_table():
+    result = runner.invoke(app, ["bankroll", "--bankroll", "5000", "--winrate", "5", "--std", "90"])
+    assert result.exit_code == 0, result.output
+    assert "RoR" in result.output
+
+
+def test_bankroll_json_single_row_by_default():
+    result = runner.invoke(
+        app, ["bankroll", "--bankroll", "5000", "--winrate", "5", "--std", "90", "--json"]
+    )
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data) == 1
+    assert data[0]["ror"] <= 5.0
+
+
+def test_bankroll_all_returns_every_standard_stake():
+    result = runner.invoke(
+        app,
+        ["bankroll", "--bankroll", "5000", "--winrate", "5", "--std", "90", "--all", "--json"],
+    )
+    data = json.loads(result.output)
+    assert len(data) == 9  # STANDARD_STAKES
+    # Fixed $ bankroll buys fewer BBs at a bigger stake, so RoR only rises.
+    rors = [r["ror"] for r in data]
+    assert rors == sorted(rors)
+
+
+def test_bankroll_nonpositive_winrate_errors_cleanly():
+    result = runner.invoke(
+        app, ["bankroll", "--bankroll", "5000", "--winrate", "-1", "--std", "90"]
+    )
+    assert result.exit_code != 0
+    assert "positive" in result.output.lower()
+
+
+# ── session ───────────────────────────────────────────────────────────────────
+
+_WALK_HAND = """\
+PokerStars Hand #200000001: Hold'em No Limit ($0.05/$0.10 USD) - 2024/01/01 12:05:00 ET
+Table 'Test I' 6-max Seat #1 is the button
+Seat 1: Hero ($10.00 in chips)
+Seat 2: Player2 ($10.00 in chips)
+Hero: posts small blind $0.05
+Player2: posts big blind $0.10
+*** HOLE CARDS ***
+Dealt to Hero [7c 2d]
+Hero: folds
+Player2 collected $0.15 from pot
+*** SUMMARY ***
+Total pot $0.15 | Rake $0.00
+Seat 1: Hero (button) (small blind) folded before Flop
+Seat 2: Player2 (big blind) collected ($0.15)
+"""
+
+
+def test_session_missing_file_errors_cleanly():
+    result = runner.invoke(app, ["session", "--import", "/no/such/file.txt"])
+    assert result.exit_code != 0
+    assert "not found" in result.output.lower()
+
+
+def test_session_json_summary(tmp_path):
+    hh = tmp_path / "history.txt"
+    hh.write_text(_WALK_HAND)
+    result = runner.invoke(app, ["session", "--import", str(hh), "--json"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["hands_played"] == 1
+    assert data["total_result"] == pytest.approx(-0.5)  # -0.05 / 0.10 bb
+
+
+def test_session_report_flag_shows_leak_table(tmp_path):
+    hh = tmp_path / "history.txt"
+    hh.write_text(_WALK_HAND)
+    result = runner.invoke(app, ["session", "--import", str(hh), "--report"])
+    assert result.exit_code == 0, result.output
+    assert "uncategorized" in result.output

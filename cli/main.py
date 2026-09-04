@@ -207,6 +207,67 @@ def icm(
 
 
 @app.command()
+def nash(
+    stacks: str = typer.Option(
+        ..., "--stacks", help="hero,villain chip stacks, e.g. 3000,7000 (hero acts first)"
+    ),
+    payouts: str = typer.Option(
+        ..., "--payouts", help="Comma-separated payout fractions, e.g. 0.65,0.35"
+    ),
+    sb: int = typer.Option(50, "--sb", help="Small blind in chips"),
+    bb: int = typer.Option(100, "--bb", help="Big blind in chips"),
+    max_iter: int = typer.Option(12, "--max-iter", help="Solver iterations"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Heads-up ICM Nash push/fold ranges (hero = SB pushes, villain = BB calls)."""
+    from engine.icm.nash import HAND_RANK, ICMNash
+
+    try:
+        stack_list = [int(float(s)) for s in stacks.split(",")]
+        payout_list = [float(p) for p in payouts.split(",")]
+    except ValueError:
+        raise typer.BadParameter("--stacks and --payouts must be comma-separated numbers")
+
+    if len(stack_list) != 2:
+        raise typer.BadParameter(f"--stacks must have exactly 2 values, got {len(stack_list)}")
+
+    solver = ICMNash()
+    try:
+        nash_result = solver.solve_hu(stack_list, payout_list, sb=sb, bb=bb, max_iter=max_iter)
+    except (ValueError, ZeroDivisionError, IndexError) as e:
+        _die(str(e))
+
+    total_hands = len(HAND_RANK)
+    push_pct = (nash_result.push_threshold + 1) / total_hands * 100
+    call_pct = (nash_result.call_threshold + 1) / total_hands * 100
+
+    result = {
+        "hero_stack": stack_list[0],
+        "villain_stack": stack_list[1],
+        "push_range": ",".join(nash_result.push_range),
+        "push_pct": round(push_pct, 1),
+        "call_range": ",".join(nash_result.call_range),
+        "call_pct": round(call_pct, 1),
+    }
+
+    if json_output:
+        typer.echo(_json.dumps(result))
+        return
+
+    console.print(
+        f"[bold]Hero[/] (SB, {stack_list[0]:,} chips) vs "
+        f"[bold]Villain[/] (BB, {stack_list[1]:,} chips)"
+    )
+    table = Table()
+    table.add_column("Range", style="bold")
+    table.add_column("% of hands", justify="right")
+    table.add_column("Hands")
+    table.add_row("Push (hero)", f"{result['push_pct']}%", result["push_range"] or "(none)")
+    table.add_row("Call (villain)", f"{result['call_pct']}%", result["call_range"] or "(none)")
+    console.print(table)
+
+
+@app.command()
 def roi(
     buyins: str = typer.Option(..., "--buyins", help="Comma-separated buy-ins, e.g. 100,100,100"),
     cashes: str = typer.Option(
@@ -250,6 +311,71 @@ def roi(
     console.print(f"Profit      : ${result['profit']:,.2f}")
     console.print(f"ROI         : [{roi_color}]{result['roi']}%[/]")
     console.print(f"ITM         : {result['itm_rate']}%")
+
+
+@app.command()
+def bankroll(
+    bankroll_dollars: float = typer.Option(..., "--bankroll", help="Bankroll in $"),
+    winrate: float = typer.Option(..., "--winrate", help="Win rate in BB/100"),
+    std: float = typer.Option(..., "--std", help="Standard deviation in BB/100"),
+    max_ror: float = typer.Option(0.05, "--max-ror", help="Max acceptable risk of ruin"),
+    buy_in_bbs: int = typer.Option(100, "--buy-in-bbs", help="Buy-in size in big blinds"),
+    hands_per_hour: int = typer.Option(70, "--hands-per-hour", help="Hands per hour"),
+    show_all: bool = typer.Option(
+        False, "--all", help="Show every standard stake, not just the recommendation"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Recommend the highest stake with risk of ruin below --max-ror."""
+    from risk.bankroll.recommender import StakeRecommender
+
+    recommender = StakeRecommender()
+    try:
+        if show_all:
+            rows = recommender.all_stakes_analysis(
+                bankroll_dollars, winrate, std, buy_in_bbs, hands_per_hour
+            )
+        else:
+            rows = [
+                recommender.recommend(
+                    bankroll_dollars, winrate, std, max_ror, buy_in_bbs, hands_per_hour
+                )
+            ]
+    except ValueError as e:
+        _die(str(e))
+
+    result = [
+        {
+            "stake": r.stake_name,
+            "bb_size": r.bb_size,
+            "bankroll_in_bb": round(r.bankroll_in_bb, 1),
+            "buy_ins": round(r.buy_ins, 1),
+            "ror": round(r.ror * 100, 4),
+            "ev_per_hour": round(r.ev_per_hour, 2),
+        }
+        for r in rows
+    ]
+
+    if json_output:
+        typer.echo(_json.dumps(result))
+        return
+
+    table = Table(title="Stake recommendation" if not show_all else "Bankroll by stake")
+    table.add_column("Stake", style="bold")
+    table.add_column("BB size", justify="right")
+    table.add_column("Buy-ins", justify="right")
+    table.add_column("RoR", justify="right")
+    table.add_column("EV/hr", justify="right", style="green")
+    for r in result:
+        ror_color = "red" if r["ror"] > max_ror * 100 else "green"
+        table.add_row(
+            r["stake"],
+            f"${r['bb_size']:,.2f}",
+            f"{r['buy_ins']:,.1f}",
+            f"[{ror_color}]{r['ror']}%[/]",
+            f"${r['ev_per_hour']:,.2f}",
+        )
+    console.print(table)
 
 
 @app.command()
