@@ -354,3 +354,60 @@ def test_icm_chart_saves_file(tmp_path):
     assert result.exit_code == 0, result.output
     assert out.exists()
     assert out.stat().st_size > 0
+
+
+# ── sim ───────────────────────────────────────────────────────────────────────
+
+_SIM_ARGS = [
+    "sim",
+    "--winrate",
+    "5",
+    "--std",
+    "90",
+    "--bankroll",
+    "2000",
+    "--num-careers",
+    "500",
+    "--num-sessions",
+    "50",
+]
+
+
+def test_sim_output_has_summary():
+    result = runner.invoke(app, _SIM_ARGS)
+    assert result.exit_code == 0, result.output
+    assert "Ruin rate" in result.output
+
+
+def test_sim_json_keys():
+    result = runner.invoke(app, [*_SIM_ARGS, "--json"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert set(data.keys()) >= {
+        "ruin_rate",
+        "mean_final_bb",
+        "final_p5_bb",
+        "final_p50_bb",
+        "final_p95_bb",
+        "hands",
+        "p5",
+        "p50",
+        "p95",
+    }
+    assert len(data["hands"]) == 51  # num_sessions + 1
+    assert data["hands"][0] == 0
+    assert data["hands"][-1] == 50 * 100  # num_sessions * hands_per_session
+
+
+def test_sim_same_seed_reproduces_same_result():
+    r1 = runner.invoke(app, [*_SIM_ARGS, "--seed", "7", "--json"])
+    r2 = runner.invoke(app, [*_SIM_ARGS, "--seed", "7", "--json"])
+    assert json.loads(r1.output) == json.loads(r2.output)
+
+
+def test_sim_multitable_beats_single_table_mean():
+    single = runner.invoke(app, [*_SIM_ARGS, "--seed", "1", "--json"])
+    multi = runner.invoke(app, [*_SIM_ARGS, "--multitable", "4", "--seed", "1", "--json"])
+    single_mean = json.loads(single.output)["mean_final_bb"]
+    multi_mean = json.loads(multi.output)["mean_final_bb"]
+    assert multi_mean > single_mean

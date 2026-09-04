@@ -552,5 +552,86 @@ def icm_chart(
     console.print(f"[green]Saved to {save}[/]")
 
 
+@app.command()
+def sim(
+    winrate: float = typer.Option(..., "--winrate", help="Win rate in BB/100"),
+    std: float = typer.Option(..., "--std", help="Standard deviation in BB/100"),
+    bankroll_bb: float = typer.Option(..., "--bankroll", help="Starting bankroll in BB"),
+    hands_per_session: int = typer.Option(100, "--hands-per-session"),
+    num_sessions: int = typer.Option(500, "--num-sessions"),
+    num_careers: int = typer.Option(10_000, "--num-careers"),
+    ruin_threshold: float = typer.Option(
+        0.0, "--ruin-threshold", help="Bankroll (BB) counted as ruin"
+    ),
+    multitable: int = typer.Option(1, "--multitable", help="Tables played simultaneously"),
+    seed: Optional[int] = typer.Option(42, "--seed", help="RNG seed (omit for non-deterministic)"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON (includes full curves)"),
+) -> None:
+    """Monte Carlo bankroll career simulation (percentile curves + ruin rate)."""
+    from risk.bankroll.simulator import BankrollSimulator
+
+    simulator = BankrollSimulator()
+    try:
+        if multitable > 1:
+            res = simulator.simulate_multitable(
+                multitable,
+                winrate,
+                std,
+                bankroll_bb,
+                hands_per_session,
+                num_sessions,
+                num_careers,
+                ruin_threshold,
+                seed,
+            )
+        else:
+            res = simulator.simulate(
+                winrate,
+                std,
+                bankroll_bb,
+                hands_per_session,
+                num_sessions,
+                num_careers,
+                ruin_threshold,
+                seed,
+            )
+    except ValueError as e:
+        _die(str(e))
+
+    total_hands = int(res.hands[-1])
+    result = {
+        "starting_bankroll_bb": bankroll_bb,
+        "total_hands": total_hands,
+        "num_careers": num_careers,
+        "ruin_rate": round(res.ruin_rate * 100, 2),
+        "mean_final_bb": round(res.mean_final, 1),
+        "final_p5_bb": round(float(res.p5[-1]), 1),
+        "final_p50_bb": round(float(res.p50[-1]), 1),
+        "final_p95_bb": round(float(res.p95[-1]), 1),
+    }
+    if json_output:
+        result["hands"] = res.hands.tolist()
+        result["p5"] = res.p5.tolist()
+        result["p50"] = res.p50.tolist()
+        result["p95"] = res.p95.tolist()
+        typer.echo(_json.dumps(result))
+        return
+
+    ruin_color = "red" if result["ruin_rate"] > 5.0 else "green"
+    console.print(f"Starting bankroll : {bankroll_bb:,.0f} bb")
+    console.print(
+        f"Sessions          : {num_sessions:,} x {hands_per_session} hands "
+        f"= {total_hands:,} hands" + (f" ({multitable} tables)" if multitable > 1 else "")
+    )
+    console.print(f"Careers simulated : {num_careers:,}")
+    console.print(f"Ruin rate         : [{ruin_color}]{result['ruin_rate']}%[/]")
+    console.print(f"Mean final        : {result['mean_final_bb']:,.1f} bb")
+    console.print(
+        "Final p5/p50/p95  : "
+        f"{result['final_p5_bb']:,.1f} / {result['final_p50_bb']:,.1f} / "
+        f"{result['final_p95_bb']:,.1f} bb"
+    )
+
+
 if __name__ == "__main__":
     app()
