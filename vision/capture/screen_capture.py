@@ -26,7 +26,7 @@ class ScreenCapture:
 
     def grab(self) -> "np.ndarray":
         """Single frame as a BGR numpy array (cv2-compatible, alpha dropped)."""
-        with mss.mss() as sct:
+        with mss.MSS() as sct:
             target = self.region or sct.monitors[self.monitor]
             shot = sct.grab(target)
             return np.array(shot)[:, :, :3]

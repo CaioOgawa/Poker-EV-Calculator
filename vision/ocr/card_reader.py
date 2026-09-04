@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 try:
     import pytesseract
     from PIL import Image
@@ -62,22 +64,30 @@ class CardReader:
             self._model = YOLO(str(self.weights))
         return self._model
 
-    def read_card(self, image_path: str | Path) -> str | None:
-        """Return card string (e.g. 'As') from cropped card image, or None."""
+    def read_card(self, image: str | Path | np.ndarray) -> str | None:
+        """Return card string (e.g. 'As') from a cropped card image — a file
+        path, or an already-decoded array — or None."""
         model = self._load_model()
-        result = model(str(image_path), verbose=False)[0]
+        source = image if isinstance(image, np.ndarray) else str(image)
+        result = model(source, verbose=False)[0]
         top1_conf = result.probs.top1conf.item()
         if top1_conf < self.confidence:
             return None
         class_name = result.names[result.probs.top1]
         return _to_treys(class_name)
 
-    def read_number(self, image: str | Path | Image.Image) -> float | None:
-        """Read a numeric value (pot size, stack) from a cropped region or an
-        already-loaded PIL image (e.g. a crop from a full table screenshot)."""
+    def read_number(self, image: str | Path | np.ndarray | Image.Image) -> float | None:
+        """Read a numeric value (pot size, stack) from a cropped region: a file
+        path, an already-loaded PIL image, or a BGR array (e.g. a crop from a
+        `cv2`/`ScreenCapture` frame — channel order matches `cv2.imread`)."""
         if not OCR_AVAILABLE:
             raise ImportError("pytesseract and Pillow required for vision module")
-        img = image if isinstance(image, Image.Image) else Image.open(str(image))
+        if isinstance(image, Image.Image):
+            img = image
+        elif isinstance(image, np.ndarray):
+            img = Image.fromarray(image[:, :, ::-1])  # BGR -> RGB
+        else:
+            img = Image.open(str(image))
         text = pytesseract.image_to_string(img, config="--psm 7 digits")
         try:
             return float(text.strip().replace(",", ""))

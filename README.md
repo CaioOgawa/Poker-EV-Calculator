@@ -44,6 +44,7 @@ poker icm-chart --stacks 5000,3000,2000 --payouts 0.5,0.3,0.2 --save bubble.png
 poker sim --winrate 5 --std 90 --bankroll 2000 [--multitable 4]
 poker solve --oop AKs --ip QJs --board 2c7dThKs --pot 100
 poker vision detect table.png [--raw]
+poker vision watch [--interval 2.0 --region left,top,width,height --max-frames N]
 poker cash-session --winrate 5 --std 90 --hands 500 [--stop-loss 50 --stop-win 100]
 poker multitable --tables 4 --winrate 5 --std 90 --correlation 0.3
 ```

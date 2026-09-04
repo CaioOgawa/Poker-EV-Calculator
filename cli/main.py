@@ -693,10 +693,12 @@ def vision_detect(
     ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Detect table state (board, pot, seats) from a screenshot with the trained YOLO models.
+    """Detect table state (board, pot, seats, hero's hole cards) from a
+    screenshot with the trained YOLO models.
 
-    Hero-vs-villain hole card attribution is not resolved — that needs a
-    per-room seat calibration that doesn't exist yet (see docs/ROADMAP.md).
+    Hero attribution uses a fixed screen-region calibration (the PokerStars
+    6-max layout this model was trained on) that hasn't been checked against
+    a real live table yet — see vision/calibration.py and docs/ROADMAP.md.
     """
     try:
         from vision.detector.table_detector import TableDetector
@@ -711,9 +713,11 @@ def vision_detect(
             state = build_game_state(image)
             result = {
                 "board": state.board,
+                "street": state.street,
                 "board_stage": state.board_stage,
                 "pot": state.pot,
                 "table_bet": state.table_bet,
+                "hero_hand": state.hero_hand,
                 "seats": {
                     i: {
                         "in_hand": s.in_hand,
@@ -732,15 +736,16 @@ def vision_detect(
         typer.echo(_json.dumps(result, default=str))
         return
 
-    console.print(
-        f"Board       : {' '.join(result['board']) or '(none)'} ({result['board_stage'] or '?'})"
-    )
+    console.print(f"Board       : {' '.join(result['board']) or '(none)'} ({result['street']})")
     console.print(f"Pot         : {result['pot']}")
     console.print(f"Table bet   : {result['table_bet']}")
+    console.print(
+        f"Hero hand   : {' '.join(result['hero_hand']) if result['hero_hand'] else '(not visible)'}"
+    )
     if result["exposed_cards"]:
         console.print(
             f"Exposed     : {' '.join(result['exposed_cards'])} "
-            "(hero/villain not resolved — needs seat calibration)"
+            "(not hero's — no per-seat opponent attribution yet)"
         )
 
     table = Table(title="Seats")
@@ -758,6 +763,56 @@ def vision_detect(
             str(s["has_bet_marker"]),
         )
     console.print(table)
+
+
+@vision_app.command("watch")
+def vision_watch(
+    interval: float = typer.Option(2.0, "--interval", help="Seconds between captures"),
+    region: Optional[str] = typer.Option(
+        None, "--region", help="left,top,width,height in screen pixels (default: full monitor)"
+    ),
+    monitor: int = typer.Option(1, "--monitor", help="Monitor index (used when --region is unset)"),
+    max_frames: Optional[int] = typer.Option(None, "--max-frames", help="Stop after N captures"),
+) -> None:
+    """Continuously capture the screen and print table state whenever it changes.
+
+    `ScreenCapture.grab()` and this command's wiring have been run for real
+    (captured this machine's screen end-to-end through detect ->
+    build_game_state -> hero attribution without error) — what's still
+    unverified is running it against an actual PokerStars table, since none
+    was available in development. Stop with Ctrl+C.
+    """
+    try:
+        from vision.capture.screen_capture import ScreenCapture
+        from vision.loop import run as run_loop
+    except ImportError as e:
+        _die(f"{e} (install with: pip install -e '.[vision]')")
+
+    region_dict = None
+    if region:
+        try:
+            left, top, width, height = (int(x) for x in region.split(","))
+        except ValueError:
+            raise typer.BadParameter("--region must be left,top,width,height")
+        region_dict = {"left": left, "top": top, "width": width, "height": height}
+
+    capture = ScreenCapture(monitor=monitor, region=region_dict)
+
+    def on_state(ts: float, state) -> None:
+        hero = " ".join(state.hero_hand) if state.hero_hand else "-"
+        board = " ".join(state.board) or "-"
+        console.print(
+            f"[dim]{ts:.1f}[/] street={state.street} board={board} "
+            f"hero={hero} pot={state.pot} table_bet={state.table_bet}"
+        )
+
+    console.print("[dim]Watching — Ctrl+C to stop[/]")
+    try:
+        n = run_loop(capture.stream(interval=interval, max_frames=max_frames), on_state)
+    except KeyboardInterrupt:
+        n = None
+    if n is not None:
+        console.print(f"[dim]Processed {n} frames[/]")
 
 
 @app.command("cash-session")

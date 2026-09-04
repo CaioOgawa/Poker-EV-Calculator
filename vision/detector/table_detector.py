@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 try:
     import cv2
 
@@ -59,9 +61,15 @@ class TableDetector:
             self._model = YOLO(str(self.weights))
         return self._model
 
-    def detect(self, image_path: str | Path) -> dict:
+    def detect(self, image: str | Path | np.ndarray) -> dict:
         """
         Detect table elements from a screenshot: cards, pot, board stage, per-seat markers.
+
+        `image` is a file path, or an already-decoded BGR array (e.g. from
+        `cv2.imread` or `ScreenCapture.grab()`) — passing an array skips a
+        redundant disk read when the caller already has the pixels (a live
+        capture loop, or `build_game_state` deriving OCR crops from the same
+        frame).
 
         Returns a dict with raw detections (bbox + confidence), not a semantic hero/board
         split — that classification belongs to a future vision/state/ layer (see ROADMAP).
@@ -74,14 +82,17 @@ class TableDetector:
                              "in_hand": bool}, ..., 5: {...}},
         }
         """
-        if not CV2_AVAILABLE:
-            raise ImportError("opencv-python required for vision module")
-        img = cv2.imread(str(image_path))
-        if img is None:
-            raise FileNotFoundError(f"Cannot read image: {image_path}")
+        if isinstance(image, np.ndarray):
+            img = image
+        else:
+            if not CV2_AVAILABLE:
+                raise ImportError("opencv-python required for vision module")
+            img = cv2.imread(str(image))
+            if img is None:
+                raise FileNotFoundError(f"Cannot read image: {image}")
 
         model = self._load_model()
-        result = model(str(image_path), conf=self.confidence, verbose=False)[0]
+        result = model(img, conf=self.confidence, verbose=False)[0]
 
         cards: list[dict] = []
         pot: dict | None = None

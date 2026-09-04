@@ -9,10 +9,16 @@ stray hole card 13% away in x and y was correctly excluded). Board size is
 always 3, 4, or 5; anything else means "no confident board found".
 
 Hole-card ownership (hero vs. an opponent's hand exposed at showdown) is
-NOT resolved here — that needs a per-room seat calibration (ROADMAP Fase 5,
-"Calibração por sala") that doesn't exist yet. Cards outside the board
-cluster are returned as `exposed_cards` with their bbox so a future
-calibration layer can attribute them to a seat instead of guessing wrong.
+resolved for cards that fall in the calibrated hero region (see
+`vision/calibration.py`) — cards outside it stay in `exposed_cards` with
+their bbox rather than being guessed at (no seat-level attribution for
+opponents yet).
+
+`street` comes from `len(board)`, not the raw `board_stage` detection: the
+"flop"/"turn"/"river" watermark classes are among the model's weaker ones
+(mAP50 0.33-0.61, see docs/ROADMAP.md), while board cards themselves are
+its strongest (mAP50 ~0.90-0.995) — `street` uses the reliable signal.
+`board_stage` is kept as-is for whatever secondary use it has, not relied on.
 """
 
 from __future__ import annotations
@@ -20,11 +26,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
+
+from vision.calibration import TableCalibration, attribute_hero_hand
+from vision.calibration import POKERSTARS_6MAX as _DEFAULT_CALIBRATION
 from vision.detector.table_detector import TableDetector
 from vision.ocr.card_reader import CardReader
 
 _BOARD_SIZES = (5, 4, 3)  # try river, then turn, then flop
 _Y_TOLERANCE_FRAC = 0.03  # fraction of image height cards must share to count as "the board"
+_STREET_BY_BOARD_LEN = {0: "preflop", 3: "flop", 4: "turn", 5: "river"}
 
 
 @dataclass
@@ -39,9 +50,11 @@ class SeatState:
 @dataclass
 class GameState:
     board: list[str] = field(default_factory=list)
+    street: str = "unknown"
     board_stage: str | None = None
     pot: float | None = None
     table_bet: float | None = None
+    hero_hand: list[str] | None = None
     seats: dict[int, SeatState] = field(default_factory=dict)
     exposed_cards: list[dict] = field(default_factory=list)
 
@@ -79,21 +92,48 @@ def _read_bbox_number(img, entry: dict | None, reader: CardReader) -> float | No
 
 
 def build_game_state(
-    image_path: str | Path,
+    image: str | Path | np.ndarray,
     detector: TableDetector | None = None,
     reader: CardReader | None = None,
+    calibration: TableCalibration | None = _DEFAULT_CALIBRATION,
 ) -> GameState:
-    """Run TableDetector + CardReader's OCR on `image_path` and group the
-    results into a GameState. See module docstring for what's NOT resolved yet."""
+    """Run TableDetector + CardReader's OCR on `image` and group the results
+    into a GameState. `image` is a file path or an already-decoded BGR array
+    (e.g. from `ScreenCapture.grab()`) — the frame is read/decoded once,
+    passed to the detector as-is, and reused for the OCR crops below, instead
+    of round-tripping through disk a second and third time.
+
+    `calibration` picks which screen region counts as hero's hole cards (see
+    vision/calibration.py); pass None to skip hero attribution entirely and
+    leave every exposed card unresolved.
+
+    See module docstring for what's NOT resolved yet."""
     from PIL import Image
 
     detector = detector or TableDetector()
     reader = reader or CardReader()
 
-    raw = detector.detect(image_path)
-    img = Image.open(str(image_path))
+    if isinstance(image, np.ndarray):
+        arr = image
+    else:
+        import cv2
 
-    board, leftover = _cluster_board(raw["cards"], img.height)
+        arr = cv2.imread(str(image))
+        if arr is None:
+            raise FileNotFoundError(f"Cannot read image: {image}")
+
+    raw = detector.detect(arr)
+    img = Image.fromarray(arr[:, :, ::-1])  # BGR -> RGB, for the PIL-based OCR crops below
+    img_width, img_height = arr.shape[1], arr.shape[0]
+
+    board, leftover = _cluster_board(raw["cards"], img_height)
+
+    hero_hand = None
+    if calibration is not None:
+        hero_hand = attribute_hero_hand(leftover, img_width, img_height, calibration)
+        if hero_hand is not None:
+            hero_ids = {id(c) for c in leftover if c["card"] in hero_hand}
+            leftover = [c for c in leftover if id(c) not in hero_ids]
 
     seats = {
         seat: SeatState(
@@ -108,9 +148,11 @@ def build_game_state(
 
     return GameState(
         board=board,
+        street=_STREET_BY_BOARD_LEN.get(len(board), "unknown"),
         board_stage=raw["board_stage"],
         pot=_read_bbox_number(img, raw["pot"], reader),
         table_bet=_read_bbox_number(img, raw["table_bet"], reader),
+        hero_hand=hero_hand,
         seats=seats,
         exposed_cards=leftover,
     )

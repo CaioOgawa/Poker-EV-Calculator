@@ -505,6 +505,34 @@ def test_vision_detect_missing_file_errors_cleanly():
     assert result.exit_code != 0
 
 
+_HERO_VISIBLE_IMAGE = Path(
+    "vision/data/raw/pokerstars/train/images/table_6max_1684667265_jpg.rf.FOjJvj54N4eSCDnoAyT1.jpg"
+)
+requires_hero_visible_image = pytest.mark.skipif(
+    not (_CV2_AVAILABLE and _WEIGHTS_PATH.exists() and _HERO_VISIBLE_IMAGE.exists()),
+    reason="trained weights or the specific hero-visible sample image not present",
+)
+
+
+@requires_hero_visible_image
+def test_vision_detect_resolves_hero_hand():
+    # A real screenshot where the model correctly detects both of the
+    # bottom-seat's hole cards (ground truth: 7c, 9s) — end-to-end proof
+    # the calibration in vision/calibration.py attributes them to hero.
+    result = runner.invoke(app, ["vision", "detect", str(_HERO_VISIBLE_IMAGE), "--json"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["hero_hand"] == ["7c", "9s"]
+
+
+@requires_trained_model
+def test_vision_watch_max_frames_stops_and_reports_count():
+    pytest.importorskip("mss")
+    result = runner.invoke(app, ["vision", "watch", "--max-frames", "1", "--interval", "0.1"])
+    assert result.exit_code == 0, result.output
+    assert "Processed 1 frames" in result.output
+
+
 # ── cash-session ─────────────────────────────────────────────────────────────
 
 _CASH_SESSION_ARGS = [
