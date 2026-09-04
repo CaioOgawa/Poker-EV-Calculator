@@ -426,7 +426,8 @@ class ICMNash:
 
         Returns NashResult with push_range (hero) and call_range (villain).
         """
-        assert len(stacks) == 2, "solve_hu requires exactly 2 players"
+        if len(stacks) != 2:
+            raise ValueError(f"solve_hu requires exactly 2 players, got {len(stacks)}")
 
         hero_stack, villain_stack = stacks
 

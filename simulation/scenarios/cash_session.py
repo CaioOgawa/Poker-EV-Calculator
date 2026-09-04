@@ -61,6 +61,13 @@ class CashSessionSim:
         stop_win_bb: if set, a session quits the first time it's up this
             many BBs.
         seed: random seed for reproducibility (None = non-deterministic).
+
+        Memory: vectorized over `(num_trials, hands)` — three arrays of that
+        shape live at once (increments, cumulative, hit_stop), ~160MB at the
+        defaults (10k x 2k, float64). Fine there; pushing either dimension
+        an order of magnitude higher starts trading RAM for swap
+        (docs/AUDITORIA-2026-08-26.md item I9) — chunk over `num_trials` if
+        that happens.
         """
         if hands <= 0:
             raise ValueError("hands must be positive")

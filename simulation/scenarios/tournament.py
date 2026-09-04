@@ -62,8 +62,12 @@ class TournamentSim:
         self._rng = random.Random(seed)
         self._icm = ICMModel()
         self._pressure = ICMPressure(self._icm)
-        # Pre-convert threshold to int to keep all comparisons in integer space
-        self._threshold_int = int(push_threshold_bbs)
+        # Threshold scaled to hundredths and kept as an int (Python ints are
+        # arbitrary-precision, so this stays exact for `bb` of any size) —
+        # `int(push_threshold_bbs)` used to truncate 12.5 to 12, so a 12.9bb
+        # stack (above the 12.5 threshold) wrongly qualified as push/fold
+        # territory (docs/AUDITORIA-2026-08-26.md item E8).
+        self._threshold_scaled = round(push_threshold_bbs * 100)
         self._bf_cache: dict[tuple[tuple[int, ...], tuple[float, ...], int, int], float] = {}
 
     # ------------------------------------------------------------------
@@ -166,8 +170,10 @@ class TournamentSim:
             pusher_seat = self._rng.choice(candidates)
             push_size = stacks[pusher_seat]
 
-            # Integer comparison: push_size // bb > threshold avoids float * huge_int
-            if bb > 0 and push_size // bb > self._threshold_int:
+            # Integer comparison, exact to hundredths of a bb: avoids both a
+            # float * huge_int precision loss and the truncated-threshold bug
+            # the old `push_size // bb > int(threshold)` had.
+            if bb > 0 and push_size * 100 > bb * self._threshold_scaled:
                 # Not in push/fold territory yet; blinds keep draining stacks,
                 # but the button still advances to the next hand.
                 bb_seat = self._next_seat(bb_seat, alive)

@@ -66,7 +66,8 @@ from simulation.scenarios.tournament import TournamentSim
 ## Desenvolvimento
 
 ```bash
-make install      # cria .venv e instala tudo
+make install         # cria .venv e instala core + charts + dev tooling
+make install-vision  # idem, + opencv/pytesseract/ultralytics (pesado, puxa torch)
 make test         # suíte completa (inclui Monte Carlo / equity sweeps)
 make test-fast    # só os testes rápidos (-m "not slow")
 make lint         # ruff check

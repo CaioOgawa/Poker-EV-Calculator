@@ -49,6 +49,13 @@ class BankrollSimulator:
         num_careers: number of independent career paths.
         ruin_threshold: bankroll at or below this is considered ruin (in BBs).
         seed: random seed for reproducibility (None = non-deterministic).
+
+        Memory: vectorized over `(num_careers, num_sessions)` — several
+        arrays of that shape (sessions, cumulative, running_min, ruined)
+        live at once, tens of MB at the defaults. Fine there; pushing either
+        dimension an order of magnitude higher starts trading RAM for swap
+        (docs/AUDITORIA-2026-08-26.md item I9) — chunk over `num_careers` if
+        that happens.
         """
         rng = np.random.default_rng(seed)
 

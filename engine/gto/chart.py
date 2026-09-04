@@ -92,6 +92,8 @@ def _normalize_hand(hand: str) -> str:
     hand = hand.strip()
     if len(hand) == 2:
         r1, r2 = hand[0].upper(), hand[1].upper()
+        if r1 not in _RANK_IDX or r2 not in _RANK_IDX:
+            raise ValueError(f"Invalid rank in hand '{hand}'")
         if r1 != r2:
             raise ValueError(f"Two-character hand '{hand}' must be a pocket pair")
         return r1 + r2

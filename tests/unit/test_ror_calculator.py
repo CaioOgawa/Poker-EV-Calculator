@@ -46,6 +46,18 @@ def test_continuous_zero_std_is_certain_ruin():
     assert ror.continuous(win_rate=5.0, std_dev=0, bankroll=1000) == 1.0
 
 
+def test_continuous_negative_bankroll_is_certain_ruin():
+    # docs/AUDITORIA-2026-08-26.md item E8: unvalidated, this used to return
+    # exp(positive) > 1 for a negative bankroll — not a valid probability.
+    ror = RiskOfRuin()
+    assert ror.continuous(win_rate=5.0, std_dev=80.0, bankroll=-100) == 1.0
+
+
+def test_continuous_zero_bankroll_is_certain_ruin():
+    ror = RiskOfRuin()
+    assert ror.continuous(win_rate=5.0, std_dev=80.0, bankroll=0) == 1.0
+
+
 def test_continuous_decreases_with_bankroll():
     ror = RiskOfRuin()
     small = ror.continuous(win_rate=5.0, std_dev=80.0, bankroll=500)

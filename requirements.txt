@@ -1,3 +1,6 @@
 # This file is kept for convenience; the source of truth for dependencies
-# is pyproject.toml. Equivalent to: pip install -e ".[charts,vision,dev]"
--e .[charts,vision,dev]
+# is pyproject.toml. Equivalent to: pip install -e ".[dev]" (dev already
+# pulls in charts transitively). vision (opencv/ultralytics/torch, GBs) is
+# opt-in — `make install-vision` or `pip install -e ".[dev,vision]"`
+# (docs/AUDITORIA-2026-08-26.md item I10).
+-e .[dev]

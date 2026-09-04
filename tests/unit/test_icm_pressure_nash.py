@@ -134,6 +134,13 @@ def test_solve_hu_returns_nashresult():
     assert isinstance(result, NashResult)
 
 
+def test_solve_hu_wrong_player_count_raises_value_error():
+    # docs/AUDITORIA-2026-08-26.md item E8: used to be an `assert`, which
+    # silently vanishes under `python -O`.
+    with pytest.raises(ValueError):
+        nash.solve_hu([2000, 8000, 5000], [0.5, 0.3, 0.2], sb=50, bb=100, max_iter=2)
+
+
 def test_solve_hu_shortstack_pushes_wide():
     # 20BB short stack should push near 100% of hands
     result = nash.solve_hu([2000, 8000], [0.65, 0.35], sb=50, bb=100, max_iter=2)

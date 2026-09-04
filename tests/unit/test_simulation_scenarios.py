@@ -43,6 +43,24 @@ def test_next_seat_handles_current_seat_already_removed():
     assert TournamentSim._next_seat(1, [0, 2, 3]) == 2
 
 
+# ------------------------------------------------------------------
+# push_threshold_bbs precision (docs/AUDITORIA-2026-08-26.md item E8)
+# ------------------------------------------------------------------
+
+
+def test_push_threshold_scaled_preserves_fraction():
+    # int(12.5) used to truncate to 12, so a 12.9bb stack (above the real
+    # 12.5 threshold) wrongly qualified as push/fold territory.
+    sim = TournamentSim(push_threshold_bbs=12.5)
+    assert sim._threshold_scaled == 1250
+
+    bb = 100
+    below_threshold_stack = 1240  # 12.40bb — should stay in push/fold territory
+    above_threshold_stack = 1290  # 12.90bb — should NOT be push/fold territory
+    assert not (below_threshold_stack * 100 > bb * sim._threshold_scaled)
+    assert above_threshold_stack * 100 > bb * sim._threshold_scaled
+
+
 def test_run_returns_tournament_result():
     result = SIM.run()
     assert isinstance(result, TournamentResult)

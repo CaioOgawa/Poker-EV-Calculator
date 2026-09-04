@@ -98,6 +98,14 @@ def test_pair_with_mismatched_ranks_raises():
         PreflopChart({"AK": {"push": 1.0}})
 
 
+def test_two_char_invalid_rank_raises():
+    # docs/AUDITORIA-2026-08-26.md item E8: the 3-char path validated ranks,
+    # the 2-char (pocket pair) path didn't, so "xx" silently normalized to
+    # "XX" instead of raising.
+    with pytest.raises(ValueError):
+        PreflopChart({"xx": {"push": 1.0}})
+
+
 def test_invalid_suit_suffix_raises():
     with pytest.raises(ValueError):
         PreflopChart({"AKx": {"push": 1.0}})

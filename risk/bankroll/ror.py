@@ -10,7 +10,7 @@ class RiskOfRuin:
         Continuous RoR formula: e^(-2 * win_rate * bankroll / std_dev^2)
         win_rate and std_dev must be in same units (BB/100 or $/hr etc.)
         """
-        if std_dev <= 0 or win_rate <= 0:
+        if std_dev <= 0 or win_rate <= 0 or bankroll <= 0:
             return 1.0
         return math.exp(-2 * win_rate * bankroll / (std_dev**2))
 

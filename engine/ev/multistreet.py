@@ -166,6 +166,7 @@ class MultiStreetEV:
 
         self._regret_sum: dict[tuple, list[float]] = {}
         self._strategy_sum: dict[tuple, list[float]] = {}
+        self._avg_strategy_cache: dict[tuple, list[float]] = {}
         self._bet_sizes: tuple[float, ...] | None = None
         self._board_start: tuple[int, ...] | None = None
         self._oop_combos: list[Combo] | None = None
@@ -205,6 +206,7 @@ class MultiStreetEV:
 
         self._regret_sum = {}
         self._strategy_sum = {}
+        self._avg_strategy_cache = {}
         self._bet_sizes = tuple(bet_sizes)
         self._board_start = board_cards
         self._oop_combos = oop_combos
@@ -331,13 +333,23 @@ class MultiStreetEV:
         if kind == "train":
             regrets = self._regret_sum.get(key)
             return _regret_match(regrets) if regrets else [1.0 / n_actions] * n_actions
+        # Frozen once `train`ing stops (docs/AUDITORIA-2026-08-26.md item I4):
+        # `_strategy_sum` is only ever written by `kind == "train"` above, so
+        # the normalized average for a given `key` never changes across the
+        # 3 evaluation traversals (avg/br_oop/br_ip) or repeated `strategy()`
+        # queries — computing it once and reusing beats renormalizing on
+        # every visit to every node of every traversal.
+        cached = self._avg_strategy_cache.get(key)
+        if cached is not None:
+            return cached
         strat_sum = self._strategy_sum.get(key)
         if not strat_sum:
-            return [1.0 / n_actions] * n_actions
-        total = sum(strat_sum)
-        if total <= 0:
-            return [1.0 / n_actions] * n_actions
-        return [s / total for s in strat_sum]
+            result = [1.0 / n_actions] * n_actions
+        else:
+            total = sum(strat_sum)
+            result = [s / total for s in strat_sum] if total > 0 else [1.0 / n_actions] * n_actions
+        self._avg_strategy_cache[key] = result
+        return result
 
     def _root(
         self,
