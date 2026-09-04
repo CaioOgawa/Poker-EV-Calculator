@@ -1,6 +1,8 @@
 """CLI integration tests using Typer's CliRunner."""
 
 import json
+from pathlib import Path
+
 import pytest
 from typer.testing import CliRunner
 
@@ -452,4 +454,52 @@ def test_solve_rejects_bad_board_length():
     result = runner.invoke(
         app, ["solve", "--oop", "AKs", "--ip", "QJs", "--board", "2c7dTh9h5c", "--pot", "100"]
     )
+    assert result.exit_code != 0
+
+
+# ── vision detect ────────────────────────────────────────────────────────────
+#
+# Trained weights (*.pt) and raw screenshots are gitignored (see docs/
+# AUDITORIA-2026-08-26.md item F8 — not backed up anywhere yet), so these
+# only run where they happen to exist on disk (this machine); everywhere
+# else they skip instead of failing.
+
+try:
+    import cv2 as _cv2  # noqa: F401
+
+    _CV2_AVAILABLE = True
+except ImportError:
+    _CV2_AVAILABLE = False
+
+_WEIGHTS_PATH = Path("vision/models/table_detector/weights/best.pt")
+_IMAGES_DIR = Path("vision/data/raw/pokerstars/valid/images")
+_SAMPLE_IMAGE = next(_IMAGES_DIR.glob("*.jpg"), None) if _IMAGES_DIR.exists() else None
+
+requires_cv2 = pytest.mark.skipif(not _CV2_AVAILABLE, reason="opencv-python not installed")
+requires_trained_model = pytest.mark.skipif(
+    not (_CV2_AVAILABLE and _WEIGHTS_PATH.exists() and _SAMPLE_IMAGE is not None),
+    reason="trained weights or sample screenshot not present on this machine",
+)
+
+
+@requires_trained_model
+def test_vision_detect_output_has_seats_table():
+    result = runner.invoke(app, ["vision", "detect", str(_SAMPLE_IMAGE)])
+    assert result.exit_code == 0, result.output
+    assert "Seats" in result.output
+
+
+@requires_trained_model
+def test_vision_detect_raw_flag_returns_bbox_json():
+    result = runner.invoke(app, ["vision", "detect", str(_SAMPLE_IMAGE), "--raw"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert "cards" in data and "players" in data
+
+
+@requires_cv2
+def test_vision_detect_missing_file_errors_cleanly():
+    # cv2.imread returns None for a missing path before any model gets
+    # loaded, so this doesn't need trained weights to exercise the error path.
+    result = runner.invoke(app, ["vision", "detect", "/no/such/image.jpg"])
     assert result.exit_code != 0

@@ -10,6 +10,8 @@ from rich.console import Console
 from rich.table import Table
 
 app = typer.Typer(help="Poker EV Calculator")
+vision_app = typer.Typer(help="Table screenshot detection (requires the [vision] extra)")
+app.add_typer(vision_app, name="vision")
 console = Console()
 
 _SUITS = frozenset("shdc")
@@ -681,6 +683,81 @@ def solve(
     console.print(f"OOP EV         : {result['oop_ev']} bb")
     console.print(f"IP EV          : {result['ip_ev']} bb")
     console.print(f"Exploitability : {result['exploitability']} bb (lower = closer to Nash)")
+
+
+@vision_app.command("detect")
+def vision_detect(
+    image: str = typer.Argument(..., help="Path to a table screenshot"),
+    raw: bool = typer.Option(
+        False, "--raw", help="Show raw TableDetector bboxes instead of the grouped GameState"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Detect table state (board, pot, seats) from a screenshot with the trained YOLO models.
+
+    Hero-vs-villain hole card attribution is not resolved — that needs a
+    per-room seat calibration that doesn't exist yet (see docs/ROADMAP.md).
+    """
+    try:
+        from vision.detector.table_detector import TableDetector
+        from vision.state.game_state import build_game_state
+    except ImportError as e:
+        _die(f"{e} (install with: pip install -e '.[vision]')")
+
+    try:
+        if raw:
+            result = TableDetector().detect(image)
+        else:
+            state = build_game_state(image)
+            result = {
+                "board": state.board,
+                "board_stage": state.board_stage,
+                "pot": state.pot,
+                "table_bet": state.table_bet,
+                "seats": {
+                    i: {
+                        "in_hand": s.in_hand,
+                        "is_dealer": s.is_dealer,
+                        "has_stack_marker": s.stack_bbox is not None,
+                        "has_bet_marker": s.bet_bbox is not None,
+                    }
+                    for i, s in state.seats.items()
+                },
+                "exposed_cards": [c["card"] for c in state.exposed_cards],
+            }
+    except FileNotFoundError as e:
+        _die(str(e))
+
+    if json_output or raw:
+        typer.echo(_json.dumps(result, default=str))
+        return
+
+    console.print(
+        f"Board       : {' '.join(result['board']) or '(none)'} ({result['board_stage'] or '?'})"
+    )
+    console.print(f"Pot         : {result['pot']}")
+    console.print(f"Table bet   : {result['table_bet']}")
+    if result["exposed_cards"]:
+        console.print(
+            f"Exposed     : {' '.join(result['exposed_cards'])} "
+            "(hero/villain not resolved — needs seat calibration)"
+        )
+
+    table = Table(title="Seats")
+    table.add_column("Seat", justify="center")
+    table.add_column("In hand")
+    table.add_column("Dealer")
+    table.add_column("Stack marker")
+    table.add_column("Bet marker")
+    for i, s in sorted(result["seats"].items()):
+        table.add_row(
+            str(i),
+            str(s["in_hand"]),
+            str(s["is_dealer"]),
+            str(s["has_stack_marker"]),
+            str(s["has_bet_marker"]),
+        )
+    console.print(table)
 
 
 if __name__ == "__main__":
