@@ -6,22 +6,14 @@ Monorepo para cálculo de EV, análise GTO e visão computacional em poker.
 
 ```
 poker-ev-calculator/
-├── core/          # Avaliação de mãos, equidade, ranges (poker-expert)
-├── engine/        # Cálculo de EV, ICM, GTO approximation (poker-quant)
-├── risk/          # Bankroll management, RoR, Kelly Criterion (poker-quant)
-├── simulation/    # Monte Carlo, cenários de torneio (poker-quant)
-├── vision/        # Detecção de mesa, OCR de cartas (poker-vision)
-├── output/        # Relatórios, gráficos, dashboards (poker-expert)
+├── core/          # Avaliação de mãos, equidade, ranges
+├── engine/        # Cálculo de EV, ICM, GTO approximation
+├── risk/          # Bankroll management, RoR, Kelly Criterion
+├── simulation/    # Monte Carlo, cenários de torneio
+├── vision/        # Detecção de mesa, OCR de cartas
+├── output/        # Relatórios, gráficos, dashboards
 └── cli/           # CLI (Typer + Rich): eval, equity, icm, roi
 ```
-
-## Skills
-
-| Módulo | Skill |
-|--------|-------|
-| core, output | poker-expert |
-| engine, risk, simulation | poker-quant |
-| vision | poker-vision |
 
 ## Setup
 
